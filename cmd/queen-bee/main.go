@@ -486,29 +486,12 @@ func cmdRun(objective, configPath, projectDir, defaultAdapter string, maxWorkers
 		logger.Fatalf("❌ Queen failed: %v", err)
 	}
 
-	// Display results
-	results := q.Results()
+	// The Queen's printReport() handles the full output display.
+	// Just print a closing line.
 	fmt.Println("")
 	fmt.Println("══════════════════════════════════════════════════")
 	fmt.Println("  ✅ Mission Complete")
 	fmt.Println("══════════════════════════════════════════════════")
-	if len(results) > 0 && verbose {
-		fmt.Println("\n  Results:")
-		for title, r := range results {
-			status := "✅"
-			if !r.Success {
-				status = "❌"
-			}
-			fmt.Printf("\n  %s %s\n", status, title)
-			if r.Output != "" {
-				// Indent output
-				for _, line := range strings.Split(strings.TrimSpace(r.Output), "\n") {
-					fmt.Printf("    %s\n", line)
-				}
-			}
-		}
-	}
-	fmt.Println("")
 }
 
 func cmdResume(configPath, projectDir, defaultAdapter string, maxWorkers int, verbose bool, logger *log.Logger) {

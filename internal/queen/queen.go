@@ -250,6 +250,7 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 			q.logger.Println("✅ All tasks complete!")
 			q.store.Append("queen.done", q.buildSummary())
 			q.db.UpdateSessionStatus(q.sessionID, "done")
+			q.printReport()
 			return nil
 
 		case PhaseFailed:
@@ -515,6 +516,16 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 				q.db.PostBlackboard(q.sessionID, bbKey, result.Output, workerID, taskID, tagsStr)
 
 				q.logger.Printf("  ✅ Task %s completed by %s", taskID, workerID)
+
+				// Show output immediately so user sees findings in real-time
+				if t != nil && result.Output != "" {
+					fmt.Printf("\n  ┌─ [%s] %s\n", t.Type, t.Title)
+					for _, line := range strings.Split(strings.TrimSpace(result.Output), "\n") {
+						fmt.Printf("  │ %s\n", line)
+					}
+					fmt.Println("  └─")
+				}
+
 				q.ctx.Add("assistant", fmt.Sprintf("Task %s completed: %s", taskID, truncate(result.Output, 500)))
 			} else {
 				q.handleTaskFailure(ctx, taskID, workerID, result)
@@ -725,13 +736,31 @@ func (q *Queen) buildSummary() map[string]interface{} {
 	}
 }
 
-// Results returns all completed task results (for output display)
-func (q *Queen) Results() map[string]*task.Result {
-	results := make(map[string]*task.Result)
+// TaskResult pairs a task with its result for ordered output
+type TaskResult struct {
+	ID          string
+	Title       string
+	Type        task.Type
+	Status      task.Status
+	Result      *task.Result
+	WorkerID    string
+	CompletedAt *time.Time
+}
+
+// Results returns all task results in creation order
+func (q *Queen) Results() []TaskResult {
+	var results []TaskResult
 	for _, t := range q.tasks.All() {
-		if t.Result != nil {
-			results[t.Title] = t.Result
+		tr := TaskResult{
+			ID:          t.ID,
+			Title:       t.Title,
+			Type:        t.Type,
+			Status:      t.Status,
+			Result:      t.Result,
+			WorkerID:    t.WorkerID,
+			CompletedAt: t.CompletedAt,
 		}
+		results = append(results, tr)
 	}
 	return results
 }
@@ -789,6 +818,64 @@ func (q *Queen) waitForWorker(ctx context.Context, bee worker.Bee, timeout time.
 			}
 		}
 	}
+}
+
+// printReport outputs a complete report of all task results
+func (q *Queen) printReport() {
+	results := q.Results()
+	if len(results) == 0 {
+		return
+	}
+
+	fmt.Println("")
+	fmt.Println("╔══════════════════════════════════════════════════╗")
+	fmt.Println("║            📋 FINAL REPORT                      ║")
+	fmt.Println("╚══════════════════════════════════════════════════╝")
+	fmt.Printf("\n  Objective: %s\n", q.objective)
+
+	completed := 0
+	failed := 0
+	for _, r := range results {
+		if r.Status == task.StatusComplete {
+			completed++
+		} else if r.Status == task.StatusFailed {
+			failed++
+		}
+	}
+	fmt.Printf("  Tasks: %d completed, %d failed, %d total\n", completed, failed, len(results))
+
+	for _, r := range results {
+		icon := "⏳"
+		switch r.Status {
+		case task.StatusComplete:
+			icon = "✅"
+		case task.StatusFailed:
+			icon = "❌"
+		}
+
+		fmt.Printf("\n  %s [%s] %s\n", icon, r.Type, r.Title)
+		fmt.Println("  " + strings.Repeat("─", 48))
+
+		if r.Result != nil && r.Result.Output != "" {
+			for _, line := range strings.Split(strings.TrimSpace(r.Result.Output), "\n") {
+				fmt.Printf("  %s\n", line)
+			}
+		} else if r.Result != nil && len(r.Result.Errors) > 0 {
+			for _, e := range r.Result.Errors {
+				if e != "" {
+					fmt.Printf("  ERROR: %s\n", e)
+				}
+			}
+		} else {
+			fmt.Println("  (no output)")
+		}
+	}
+
+	fmt.Println("")
+	fmt.Println("  " + strings.Repeat("═", 48))
+	fmt.Printf("  Session: %s\n", q.sessionID)
+	fmt.Printf("  Log: .hive/hive.db\n")
+	fmt.Println("")
 }
 
 func truncate(s string, max int) string {
