@@ -1,7 +1,7 @@
 package adapter
 
 import (
-	"context"
+	"fmt"
 
 	"github.com/exedev/queen-bee/internal/task"
 	"github.com/exedev/queen-bee/internal/worker"
@@ -52,7 +52,10 @@ func (r *Registry) WorkerFactory() worker.Factory {
 	return func(id string, adapterName string) (worker.Bee, error) {
 		a, ok := r.adapters[adapterName]
 		if !ok {
-			return nil, context.DeadlineExceeded // placeholder
+			return nil, fmt.Errorf("adapter %q not registered", adapterName)
+		}
+		if !a.Available() {
+			return nil, fmt.Errorf("adapter %q not available (CLI not found in PATH)", adapterName)
 		}
 		return a.CreateWorker(id), nil
 	}

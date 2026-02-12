@@ -47,11 +47,44 @@ go build -o queen-bee ./cmd/queen-bee/
 cd /path/to/your/project
 queen-bee init
 
-# Run with an objective
+# Run with an objective (uses AI adapter for planning + execution)
 queen-bee run "Refactor the auth module to use JWT tokens"
 
 # With options
 queen-bee --adapter codex --workers 8 run "Add unit tests for all handlers"
+
+# Use exec adapter for shell commands (no AI CLI required)
+queen-bee --adapter exec run "go test ./..."
+
+# Pre-defined task file for parallel execution
+queen-bee --adapter exec --tasks tasks.json -v run "Run analysis"
+
+# Verbose mode shows task results at completion
+queen-bee --adapter exec -v run "ls -la"
+```
+
+### Task File Format
+
+Pre-define parallel tasks with dependencies in JSON:
+
+```json
+[
+  {
+    "id": "lint",
+    "type": "test",
+    "title": "Run linter",
+    "description": "golangci-lint run ./...",
+    "priority": 2
+  },
+  {
+    "id": "test",
+    "type": "test",
+    "title": "Run tests",
+    "description": "go test ./...",
+    "priority": 3,
+    "depends_on": ["lint"]
+  }
+]
 ```
 
 ## Project Structure
@@ -67,9 +100,11 @@ queen-bee/
 │   │   └── worker.go
 │   ├── adapter/            # CLI wrapper adapters
 │   │   ├── adapter.go      #    Registry + Task Router
-│   │   ├── claude.go       #    Claude Code adapter
-│   │   ├── codex.go        #    Codex adapter
-│   │   └── opencode.go     #    OpenCode adapter
+│   │   ├── claude.go       #    Claude Code (-p flag)
+│   │   ├── codex.go        #    Codex (exec subcommand)
+│   │   ├── opencode.go     #    OpenCode CLI
+│   │   ├── shelley.go      #    Shelley CLI
+│   │   └── exec.go         #    Direct shell execution (bash -c)
 │   ├── bus/                # 📨 In-process pub/sub message bus
 │   │   └── bus.go
 │   ├── blackboard/         # 📋 Shared memory for inter-agent comms
@@ -123,9 +158,11 @@ Wrap coding agent CLIs behind a uniform interface:
 
 | Adapter | CLI | Command |
 |---------|-----|---------|
-| `claude-code` | Claude Code | `claude --print "<prompt>"` |
+| `claude-code` | Claude Code | `claude -p "<prompt>"` |
 | `codex` | Codex | `codex exec "<prompt>"` |
 | `opencode` | OpenCode | `opencode "<prompt>"` |
+| `exec` | Shell (bash) | `bash -c "<description>"` |
+| `shelley` | Shelley | `shelley -p "<prompt>"` |
 
 The **Task Router** maps task types to adapters (e.g., code tasks → claude-code, test tasks → codex).
 

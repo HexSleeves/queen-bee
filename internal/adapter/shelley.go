@@ -3,7 +3,6 @@ package adapter
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os/exec"
 	"strings"
 	"sync"
@@ -12,46 +11,46 @@ import (
 	"github.com/exedev/queen-bee/internal/worker"
 )
 
-// ClaudeAdapter wraps the `claude` CLI
-type ClaudeAdapter struct {
+// ShelleyAdapter wraps the `shelley` CLI
+type ShelleyAdapter struct {
 	command string
 	args    []string
 	workDir string
 }
 
-func NewClaudeAdapter(command string, args []string, workDir string) *ClaudeAdapter {
+func NewShelleyAdapter(command string, args []string, workDir string) *ShelleyAdapter {
 	if command == "" {
-		command = "claude"
+		command = "shelley"
 	}
 	if len(args) == 0 {
 		args = []string{"-p"}
 	}
-	return &ClaudeAdapter{
+	return &ShelleyAdapter{
 		command: command,
 		args:    args,
 		workDir: workDir,
 	}
 }
 
-func (a *ClaudeAdapter) Name() string { return "claude-code" }
+func (a *ShelleyAdapter) Name() string { return "shelley" }
 
-func (a *ClaudeAdapter) Available() bool {
+func (a *ShelleyAdapter) Available() bool {
 	_, err := exec.LookPath(a.command)
 	return err == nil
 }
 
-func (a *ClaudeAdapter) CreateWorker(id string) worker.Bee {
-	return &ClaudeWorker{
+func (a *ShelleyAdapter) CreateWorker(id string) worker.Bee {
+	return &ShelleyWorker{
 		id:      id,
 		adapter: a,
 		status:  worker.StatusIdle,
 	}
 }
 
-// ClaudeWorker is a Bee backed by the claude CLI
-type ClaudeWorker struct {
+// ShelleyWorker is a Bee backed by the shelley CLI
+type ShelleyWorker struct {
 	id      string
-	adapter *ClaudeAdapter
+	adapter *ShelleyAdapter
 	status  worker.Status
 	result  *task.Result
 	output  strings.Builder
@@ -59,16 +58,16 @@ type ClaudeWorker struct {
 	mu      sync.Mutex
 }
 
-func (w *ClaudeWorker) ID() string   { return w.id }
-func (w *ClaudeWorker) Type() string { return "claude-code" }
+func (w *ShelleyWorker) ID() string   { return w.id }
+func (w *ShelleyWorker) Type() string { return "shelley" }
 
-func (w *ClaudeWorker) Spawn(ctx context.Context, t *task.Task) error {
+func (w *ShelleyWorker) Spawn(ctx context.Context, t *task.Task) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	prompt := buildPrompt(t)
 
-	// Build command: claude --print "prompt"
+	// Build command: shelley -p "prompt"
 	args := make([]string, len(w.adapter.args))
 	copy(args, w.adapter.args)
 	args = append(args, prompt)
@@ -116,19 +115,19 @@ func (w *ClaudeWorker) Spawn(ctx context.Context, t *task.Task) error {
 	return nil
 }
 
-func (w *ClaudeWorker) Monitor() worker.Status {
+func (w *ShelleyWorker) Monitor() worker.Status {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.status
 }
 
-func (w *ClaudeWorker) Result() *task.Result {
+func (w *ShelleyWorker) Result() *task.Result {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.result
 }
 
-func (w *ClaudeWorker) Kill() error {
+func (w *ShelleyWorker) Kill() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.cmd != nil && w.cmd.Process != nil {
@@ -138,28 +137,8 @@ func (w *ClaudeWorker) Kill() error {
 	return nil
 }
 
-func (w *ClaudeWorker) Output() string {
+func (w *ShelleyWorker) Output() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.output.String()
-}
-
-func buildPrompt(t *task.Task) string {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Task: %s\n", t.Title))
-	b.WriteString(fmt.Sprintf("Type: %s\n", t.Type))
-	b.WriteString(fmt.Sprintf("Description:\n%s\n", t.Description))
-
-	if len(t.Context) > 0 {
-		b.WriteString("\nContext:\n")
-		for k, v := range t.Context {
-			b.WriteString(fmt.Sprintf("- %s: %s\n", k, v))
-		}
-	}
-
-	if len(t.AllowedPaths) > 0 {
-		b.WriteString(fmt.Sprintf("\nOnly modify files in: %s\n", strings.Join(t.AllowedPaths, ", ")))
-	}
-
-	return b.String()
 }

@@ -78,7 +78,7 @@ func DefaultConfig() *Config {
 		Adapters: map[string]AdapterConfig{
 			"claude-code": {
 				Command: "claude",
-				Args:    []string{"--print"},
+				Args:    []string{"-p"},
 			},
 			"codex": {
 				Command: "codex",
@@ -86,6 +86,13 @@ func DefaultConfig() *Config {
 			},
 			"opencode": {
 				Command: "opencode",
+			},
+			"shelley": {
+				Command: "shelley",
+				Args:    []string{"-p"},
+			},
+			"exec": {
+				Command: "bash",
 			},
 		},
 		Safety: SafetyConfig{

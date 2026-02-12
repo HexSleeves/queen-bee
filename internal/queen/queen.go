@@ -50,9 +50,16 @@ type Queen struct {
 	objective  string
 	iteration  int
 	logger     *log.Logger
+	lastErr    error
 
 	// For tracking worker->task assignments
-	assignments map[string]string // workerID -> taskID
+	assignments  map[string]string // workerID -> taskID
+	pendingTasks []*task.Task      // pre-defined tasks (skip AI planning)
+}
+
+// SetTasks allows pre-defining tasks, skipping AI-based planning
+func (q *Queen) SetTasks(tasks []*task.Task) {
+	q.pendingTasks = tasks
 }
 
 // New creates a new Queen orchestrator
@@ -94,6 +101,18 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 		cfg.ProjectDir,
 	))
 
+	// Register exec adapter (always available fallback)
+	registry.Register(adapter.NewExecAdapter(cfg.ProjectDir))
+
+	// Register shelley adapter if configured
+	if _, ok := cfg.Adapters["shelley"]; ok {
+		registry.Register(adapter.NewShelleyAdapter(
+			cfg.Adapters["shelley"].Command,
+			cfg.Adapters["shelley"].Args,
+			cfg.ProjectDir,
+		))
+	}
+
 	router := adapter.NewTaskRouter(registry)
 
 	// Initialize worker pool
@@ -134,6 +153,27 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 	q.objective = objective
 	q.logger.Printf("🐝 Queen Bee starting | Objective: %s", objective)
 
+	// Preflight: verify the default adapter is available
+	available := q.registry.Available()
+	if len(available) == 0 {
+		return fmt.Errorf("no adapters available — install claude, codex, or opencode CLI")
+	}
+	defaultAdapter := q.cfg.Workers.DefaultAdapter
+	allTypes := []task.Type{task.TypeCode, task.TypeResearch, task.TypeTest, task.TypeReview, task.TypeGeneric}
+	if a, ok := q.registry.Get(defaultAdapter); !ok || !a.Available() {
+		q.logger.Printf("⚠ Default adapter %q not available, falling back to: %s", defaultAdapter, available[0])
+		for _, tt := range allTypes {
+			q.router.SetRoute(tt, available[0])
+		}
+	} else {
+		q.logger.Printf("✓ Using adapter: %s", defaultAdapter)
+		// Ensure all task types route to the user's chosen adapter
+		for _, tt := range allTypes {
+			q.router.SetRoute(tt, defaultAdapter)
+		}
+	}
+	q.logger.Printf("✓ Available adapters: %v", available)
+
 	q.store.Append("queen.start", map[string]string{
 		"objective": objective,
 	})
@@ -153,6 +193,7 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 		case PhasePlan:
 			if err := q.plan(ctx); err != nil {
 				q.logger.Printf("❌ Plan failed: %v", err)
+				q.lastErr = err
 				q.phase = PhaseFailed
 				continue
 			}
@@ -218,7 +259,37 @@ func (q *Queen) plan(ctx context.Context) error {
 		return nil
 	}
 
-	// Decompose the objective into tasks using the configured worker
+	// Check if pre-defined tasks were set (e.g., from --tasks flag or file)
+	if len(q.pendingTasks) > 0 {
+		for _, t := range q.pendingTasks {
+			q.tasks.Add(t)
+			q.logger.Printf("  📌 Task: [%s] %s", t.Type, t.Title)
+		}
+		q.pendingTasks = nil
+		return nil
+	}
+
+	// For non-AI adapters (exec), create a single direct task from the objective
+	adapterName := q.router.Route(&task.Task{Type: task.TypeGeneric})
+	if adapterName == "exec" {
+		q.logger.Println("  Using exec adapter — treating objective as single task")
+		t := &task.Task{
+			ID:          fmt.Sprintf("task-%d", time.Now().UnixNano()),
+			Type:        task.TypeGeneric,
+			Status:      task.StatusPending,
+			Priority:    task.PriorityNormal,
+			Title:       "Execute objective",
+			Description: q.objective,
+			MaxRetries:  q.cfg.Workers.MaxRetries,
+			CreatedAt:   time.Now(),
+			Timeout:     q.cfg.Workers.DefaultTimeout,
+		}
+		q.tasks.Add(t)
+		q.logger.Printf("  📌 Task: [%s] %s", t.Type, t.Title)
+		return nil
+	}
+
+	// Use AI adapter to decompose the objective
 	planTask := &task.Task{
 		ID:          fmt.Sprintf("plan-%d", time.Now().UnixNano()),
 		Type:        task.TypeGeneric,
@@ -228,11 +299,6 @@ func (q *Queen) plan(ctx context.Context) error {
 		Description: q.buildPlanPrompt(),
 		CreatedAt:   time.Now(),
 		Timeout:     q.cfg.Queen.PlanTimeout,
-	}
-
-	adapterName := q.router.Route(planTask)
-	if adapterName == "" {
-		return fmt.Errorf("no adapter available for planning")
 	}
 
 	bee, err := q.pool.Spawn(ctx, planTask, adapterName)
@@ -248,7 +314,9 @@ func (q *Queen) plan(ctx context.Context) error {
 	result := bee.Result()
 	if result == nil || !result.Success {
 		errMsg := "unknown error"
-		if result != nil && len(result.Errors) > 0 {
+		if output := bee.Output(); output != "" {
+			errMsg = output
+		} else if result != nil && len(result.Errors) > 0 {
 			errMsg = strings.Join(result.Errors, "; ")
 		}
 		return fmt.Errorf("planning failed: %s", errMsg)
@@ -477,6 +545,20 @@ func (q *Queen) handleFailure(ctx context.Context) error {
 	q.pool.KillAll()
 
 	failed := q.tasks.Failed()
+
+	// If there are no tasks at all, the failure happened before/during planning
+	if len(q.tasks.All()) == 0 {
+		errMsg := "unknown error"
+		if q.lastErr != nil {
+			errMsg = q.lastErr.Error()
+		}
+		q.store.Append("queen.failed", map[string]interface{}{
+			"phase": "planning",
+			"error": errMsg,
+		})
+		return fmt.Errorf("queen failed during planning phase: %s", errMsg)
+	}
+
 	var errs []string
 	for _, t := range failed {
 		errs = append(errs, fmt.Sprintf("[%s] %s", t.ID, t.Title))
@@ -593,6 +675,17 @@ func (q *Queen) buildSummary() map[string]interface{} {
 		"iterations":      q.iteration + 1,
 		"blackboard_keys": q.board.Keys(),
 	}
+}
+
+// Results returns all completed task results (for output display)
+func (q *Queen) Results() map[string]*task.Result {
+	results := make(map[string]*task.Result)
+	for _, t := range q.tasks.All() {
+		if t.Result != nil {
+			results[t.Title] = t.Result
+		}
+	}
+	return results
 }
 
 // Close cleans up resources

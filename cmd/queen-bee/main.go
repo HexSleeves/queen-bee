@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -9,9 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/exedev/queen-bee/internal/config"
 	"github.com/exedev/queen-bee/internal/queen"
+	"github.com/exedev/queen-bee/internal/task"
 )
 
 const version = "0.1.0"
@@ -31,12 +34,15 @@ Examples:
   queen-bee run "Refactor the auth module to use JWT tokens"
   queen-bee run "Add comprehensive tests for the API layer"
   queen-bee --config queen.json run "Build a REST API"
+  queen-bee --adapter exec run "go test ./..."
+  queen-bee --tasks tasks.json run "Execute planned tasks"
 
 Options:
   --config <path>    Path to config file (default: queen.json)
   --project <path>   Project directory (default: current directory)
-  --adapter <name>   Default adapter: claude-code, codex, opencode
+  --adapter <name>   Default adapter: claude-code, codex, opencode, exec
   --workers <n>      Max parallel workers (default: 4)
+  --tasks <path>     Load pre-defined tasks from a JSON file
   --verbose          Verbose logging
 `
 
@@ -54,6 +60,7 @@ func main() {
 	projectDir := "."
 	defaultAdapter := ""
 	maxWorkers := 0
+	tasksFile := ""
 	verbose := false
 
 	var positional []string
@@ -78,6 +85,11 @@ func main() {
 			if i+1 < len(args) {
 				i++
 				fmt.Sscanf(args[i], "%d", &maxWorkers)
+			}
+		case "--tasks":
+			if i+1 < len(args) {
+				i++
+				tasksFile = args[i]
 			}
 		case "--verbose", "-v":
 			verbose = true
@@ -119,7 +131,7 @@ func main() {
 			logger.Fatal("Usage: queen-bee run <objective>")
 		}
 		objective := strings.Join(positional[1:], " ")
-		cmdRun(objective, configPath, projectDir, defaultAdapter, maxWorkers, verbose, logger)
+		cmdRun(objective, configPath, projectDir, defaultAdapter, maxWorkers, tasksFile, verbose, logger)
 		return
 
 	case "resume":
@@ -129,7 +141,7 @@ func main() {
 	default:
 		// Treat as implicit "run" if it's not a known command
 		objective := strings.Join(positional, " ")
-		cmdRun(objective, configPath, projectDir, defaultAdapter, maxWorkers, verbose, logger)
+		cmdRun(objective, configPath, projectDir, defaultAdapter, maxWorkers, tasksFile, verbose, logger)
 	}
 }
 
@@ -201,7 +213,7 @@ func cmdStatus(projectDir string, logger *log.Logger) {
 	fmt.Println(string(data))
 }
 
-func cmdRun(objective, configPath, projectDir, defaultAdapter string, maxWorkers int, verbose bool, logger *log.Logger) {
+func cmdRun(objective, configPath, projectDir, defaultAdapter string, maxWorkers int, tasksFile string, verbose bool, logger *log.Logger) {
 	cfg := loadConfig(configPath, projectDir, defaultAdapter, maxWorkers)
 
 	if verbose {
@@ -223,6 +235,16 @@ func cmdRun(objective, configPath, projectDir, defaultAdapter string, maxWorkers
 	}
 	defer q.Close()
 
+	// Load pre-defined tasks if provided
+	if tasksFile != "" {
+		tasks, err := loadTasksFile(tasksFile, cfg)
+		if err != nil {
+			logger.Fatalf("Load tasks file: %v", err)
+		}
+		q.SetTasks(tasks)
+		logger.Printf("Loaded %d tasks from %s", len(tasks), tasksFile)
+	}
+
 	// Handle graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -240,10 +262,29 @@ func cmdRun(objective, configPath, projectDir, defaultAdapter string, maxWorkers
 		logger.Fatalf("❌ Queen failed: %v", err)
 	}
 
+	// Display results
+	results := q.Results()
 	fmt.Println("")
 	fmt.Println("══════════════════════════════════════════════════")
 	fmt.Println("  ✅ Mission Complete")
 	fmt.Println("══════════════════════════════════════════════════")
+	if len(results) > 0 && verbose {
+		fmt.Println("\n  Results:")
+		for title, r := range results {
+			status := "✅"
+			if !r.Success {
+				status = "❌"
+			}
+			fmt.Printf("\n  %s %s\n", status, title)
+			if r.Output != "" {
+				// Indent output
+				for _, line := range strings.Split(strings.TrimSpace(r.Output), "\n") {
+					fmt.Printf("    %s\n", line)
+				}
+			}
+		}
+	}
+	fmt.Println("")
 }
 
 func cmdResume(configPath, projectDir, defaultAdapter string, maxWorkers int, verbose bool, logger *log.Logger) {
@@ -256,5 +297,51 @@ func cmdResume(configPath, projectDir, defaultAdapter string, maxWorkers int, ve
 	logger.Println("🔄 Resuming previous session...")
 	// For now, read objective from state and re-run
 	// The Queen's plan phase will pick up existing tasks from the store
-	cmdRun("[resumed session]", configPath, projectDir, defaultAdapter, maxWorkers, verbose, logger)
+	cmdRun("[resumed session]", configPath, projectDir, defaultAdapter, maxWorkers, "", verbose, logger)
+}
+
+func loadTasksFile(path string, cfg *config.Config) ([]*task.Task, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var rawTasks []struct {
+		ID          string   `json:"id"`
+		Type        string   `json:"type"`
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
+		Priority    int      `json:"priority"`
+		DependsOn   []string `json:"depends_on"`
+		MaxRetries  int      `json:"max_retries"`
+	}
+
+	if err := json.Unmarshal(data, &rawTasks); err != nil {
+		return nil, fmt.Errorf("parse tasks JSON: %w", err)
+	}
+
+	tasks := make([]*task.Task, 0, len(rawTasks))
+	for _, rt := range rawTasks {
+		t := &task.Task{
+			ID:          rt.ID,
+			Type:        task.Type(rt.Type),
+			Status:      task.StatusPending,
+			Priority:    task.Priority(rt.Priority),
+			Title:       rt.Title,
+			Description: rt.Description,
+			DependsOn:   rt.DependsOn,
+			MaxRetries:  rt.MaxRetries,
+			CreatedAt:   time.Now(),
+			Timeout:     cfg.Workers.DefaultTimeout,
+		}
+		if t.MaxRetries == 0 {
+			t.MaxRetries = cfg.Workers.MaxRetries
+		}
+		if t.ID == "" {
+			t.ID = fmt.Sprintf("task-%d", time.Now().UnixNano())
+		}
+		tasks = append(tasks, t)
+	}
+
+	return tasks, nil
 }
