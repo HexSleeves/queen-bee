@@ -3,6 +3,7 @@ package adapter
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -22,6 +23,21 @@ func NewOpenCodeAdapter(command string, args []string, workDir string) *OpenCode
 	if command == "" {
 		command = "opencode"
 	}
+	// If command isn't on PATH, check common install locations
+	if _, err := exec.LookPath(command); err != nil {
+		for _, p := range []string{
+			os.ExpandEnv("$HOME/.opencode/bin/opencode"),
+			"/usr/local/bin/opencode",
+		} {
+			if _, err := os.Stat(p); err == nil {
+				command = p
+				break
+			}
+		}
+	}
+	if len(args) == 0 {
+		args = []string{"run"}
+	}
 	return &OpenCodeAdapter{
 		command: command,
 		args:    args,
@@ -32,8 +48,14 @@ func NewOpenCodeAdapter(command string, args []string, workDir string) *OpenCode
 func (a *OpenCodeAdapter) Name() string { return "opencode" }
 
 func (a *OpenCodeAdapter) Available() bool {
-	_, err := exec.LookPath(a.command)
-	return err == nil
+	// Check both LookPath and direct file existence (for absolute paths)
+	if _, err := exec.LookPath(a.command); err == nil {
+		return true
+	}
+	if _, err := os.Stat(a.command); err == nil {
+		return true
+	}
+	return false
 }
 
 func (a *OpenCodeAdapter) CreateWorker(id string) worker.Bee {

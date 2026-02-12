@@ -36,21 +36,23 @@ const (
 type Queen struct {
 	mu sync.RWMutex
 
-	cfg        *config.Config
-	bus        *bus.MessageBus
-	store      *state.Store
-	board      *blackboard.Blackboard
-	tasks      *task.TaskGraph
-	pool       *worker.Pool
-	router     *adapter.TaskRouter
-	registry   *adapter.Registry
-	ctx        *compact.Context
+	cfg      *config.Config
+	bus      *bus.MessageBus
+	store    *state.Store
+	db       *state.DB
+	board    *blackboard.Blackboard
+	tasks    *task.TaskGraph
+	pool     *worker.Pool
+	router   *adapter.TaskRouter
+	registry *adapter.Registry
+	ctx      *compact.Context
 
-	phase      Phase
-	objective  string
-	iteration  int
-	logger     *log.Logger
-	lastErr    error
+	phase     Phase
+	objective string
+	sessionID string
+	iteration int
+	logger    *log.Logger
+	lastErr   error
 
 	// For tracking worker->task assignments
 	assignments  map[string]string // workerID -> taskID
@@ -75,6 +77,12 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	store, err := state.NewStore(cfg.HivePath())
 	if err != nil {
 		return nil, fmt.Errorf("init state store: %w", err)
+	}
+
+	// Initialize SQLite DB (additional persistence layer)
+	db, err := state.OpenDB(cfg.HivePath())
+	if err != nil {
+		return nil, fmt.Errorf("init state db: %w", err)
 	}
 
 	// Initialize blackboard
@@ -129,6 +137,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 		cfg:         cfg,
 		bus:         msgBus,
 		store:       store,
+		db:          db,
 		board:       board,
 		tasks:       tasks,
 		pool:        pool,
@@ -143,6 +152,9 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	// Wire up event logging
 	msgBus.SubscribeAll(func(msg bus.Message) {
 		store.Append(string(msg.Type), msg)
+		if sid := q.sessionID; sid != "" {
+			q.db.AppendEvent(sid, string(msg.Type), msg)
+		}
 	})
 
 	return q, nil
@@ -173,6 +185,12 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 		}
 	}
 	q.logger.Printf("✓ Available adapters: %v", available)
+
+	// Create DB session
+	q.sessionID = fmt.Sprintf("session-%d", time.Now().UnixNano())
+	if err := q.db.CreateSession(q.sessionID, objective); err != nil {
+		q.logger.Printf("⚠ DB: failed to create session: %v", err)
+	}
 
 	q.store.Append("queen.start", map[string]string{
 		"objective": objective,
@@ -231,6 +249,7 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 		case PhaseDone:
 			q.logger.Println("✅ All tasks complete!")
 			q.store.Append("queen.done", q.buildSummary())
+			q.db.UpdateSessionStatus(q.sessionID, "done")
 			return nil
 
 		case PhaseFailed:
@@ -263,6 +282,11 @@ func (q *Queen) plan(ctx context.Context) error {
 	if len(q.pendingTasks) > 0 {
 		for _, t := range q.pendingTasks {
 			q.tasks.Add(t)
+			q.db.InsertTask(q.sessionID, state.TaskRow{
+				ID: t.ID, Type: string(t.Type), Status: string(t.Status),
+				Priority: int(t.Priority), Title: t.Title, Description: t.Description,
+				MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
+			})
 			q.logger.Printf("  📌 Task: [%s] %s", t.Type, t.Title)
 		}
 		q.pendingTasks = nil
@@ -285,6 +309,11 @@ func (q *Queen) plan(ctx context.Context) error {
 			Timeout:     q.cfg.Workers.DefaultTimeout,
 		}
 		q.tasks.Add(t)
+		q.db.InsertTask(q.sessionID, state.TaskRow{
+			ID: t.ID, Type: string(t.Type), Status: string(t.Status),
+			Priority: int(t.Priority), Title: t.Title, Description: t.Description,
+			MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
+		})
 		q.logger.Printf("  📌 Task: [%s] %s", t.Type, t.Title)
 		return nil
 	}
@@ -330,6 +359,11 @@ func (q *Queen) plan(ctx context.Context) error {
 
 	for _, t := range tasks {
 		q.tasks.Add(t)
+		q.db.InsertTask(q.sessionID, state.TaskRow{
+			ID: t.ID, Type: string(t.Type), Status: string(t.Status),
+			Priority: int(t.Priority), Title: t.Title, Description: t.Description,
+			MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
+		})
 		q.logger.Printf("  📌 Task: [%s] %s", t.Type, t.Title)
 	}
 
@@ -382,6 +416,9 @@ func (q *Queen) delegate(ctx context.Context) error {
 
 		q.tasks.UpdateStatus(t.ID, task.StatusRunning)
 		t.WorkerID = bee.ID()
+
+		q.db.UpdateTaskStatus(q.sessionID, t.ID, "running")
+		q.db.UpdateTaskWorker(q.sessionID, t.ID, bee.ID())
 
 		q.logger.Printf("  🐝 Assigned [%s] %s -> %s (%s)", t.Type, t.Title, bee.ID(), adapterName)
 
@@ -459,14 +496,23 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 					t.Result = result
 				}
 
+				q.db.UpdateTaskStatus(q.sessionID, taskID, "complete")
+				q.db.UpdateTaskResult(q.sessionID, taskID, result)
+
 				// Post result to blackboard
+				bbKey := fmt.Sprintf("result-%s", taskID)
+				var tagsStr string
+				if t != nil {
+					tagsStr = strings.Join([]string{"result", string(t.Type)}, ",")
+				}
 				q.board.Post(&blackboard.Entry{
-					Key:      fmt.Sprintf("result-%s", taskID),
+					Key:      bbKey,
 					Value:    result.Output,
 					PostedBy: workerID,
 					TaskID:   taskID,
 					Tags:     []string{"result", string(t.Type)},
 				})
+				q.db.PostBlackboard(q.sessionID, bbKey, result.Output, workerID, taskID, tagsStr)
 
 				q.logger.Printf("  ✅ Task %s completed by %s", taskID, workerID)
 				q.ctx.Add("assistant", fmt.Sprintf("Task %s completed: %s", taskID, truncate(result.Output, 500)))
@@ -524,6 +570,7 @@ func (q *Queen) handleTaskFailure(ctx context.Context, taskID, workerID string, 
 	if t.RetryCount < t.MaxRetries {
 		t.RetryCount++
 		q.tasks.UpdateStatus(taskID, task.StatusPending)
+		q.db.UpdateTaskStatus(q.sessionID, taskID, "pending")
 		q.logger.Printf("  🔄 Retrying task %s (attempt %d/%d)", taskID, t.RetryCount, t.MaxRetries)
 
 		q.store.Append("queen.retry", map[string]interface{}{
@@ -533,6 +580,7 @@ func (q *Queen) handleTaskFailure(ctx context.Context, taskID, workerID string, 
 		})
 	} else {
 		q.tasks.UpdateStatus(taskID, task.StatusFailed)
+		q.db.UpdateTaskStatus(q.sessionID, taskID, "failed")
 		q.store.Append("queen.task_failed", map[string]interface{}{
 			"task_id": taskID,
 			"error":   errMsg,
@@ -691,6 +739,10 @@ func (q *Queen) Results() map[string]*task.Result {
 // Close cleans up resources
 func (q *Queen) Close() error {
 	q.pool.KillAll()
+	if q.sessionID != "" {
+		q.db.UpdateSessionStatus(q.sessionID, "stopped")
+	}
+	q.db.Close()
 	return q.store.Close()
 }
 

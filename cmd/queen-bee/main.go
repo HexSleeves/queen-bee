@@ -14,6 +14,7 @@ import (
 
 	"github.com/exedev/queen-bee/internal/config"
 	"github.com/exedev/queen-bee/internal/queen"
+	"github.com/exedev/queen-bee/internal/state"
 	"github.com/exedev/queen-bee/internal/task"
 )
 
@@ -201,16 +202,239 @@ func cmdConfig(configPath string, logger *log.Logger) {
 }
 
 func cmdStatus(projectDir string, logger *log.Logger) {
-	statePath := filepath.Join(projectDir, ".hive", "state.json")
-	data, err := os.ReadFile(statePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			logger.Println("No active hive session. Run 'queen-bee init' first.")
-			return
-		}
-		logger.Fatalf("Read state: %v", err)
+	hiveDir := filepath.Join(projectDir, ".hive")
+
+	if _, err := os.Stat(hiveDir); os.IsNotExist(err) {
+		logger.Println("No active hive session. Run 'queen-bee init' first.")
+		return
 	}
-	fmt.Println(string(data))
+
+	dbPath := filepath.Join(hiveDir, "hive.db")
+	logPath := filepath.Join(hiveDir, "log.jsonl")
+
+	// Try SQLite DB first; fall back to JSONL if DB doesn't exist
+	if _, err := os.Stat(dbPath); err == nil {
+		cmdStatusDB(hiveDir, logger)
+		return
+	}
+
+	// Fallback: parse JSONL (legacy sessions)
+	if _, err := os.Stat(logPath); err == nil {
+		cmdStatusJSONL(logPath, logger)
+		return
+	}
+
+	fmt.Println("Hive initialized but no sessions run yet.")
+}
+
+// cmdStatusDB reads status from the SQLite database.
+func cmdStatusDB(hiveDir string, logger *log.Logger) {
+	db, err := state.OpenDB(hiveDir)
+	if err != nil {
+		logger.Fatalf("Open DB: %v", err)
+	}
+	defer db.Close()
+
+	session, err := db.LatestSession()
+	if err != nil {
+		fmt.Println("Hive initialized but no sessions run yet.")
+		return
+	}
+
+	counts, err := db.CountTasksByStatus(session.ID)
+	if err != nil {
+		logger.Fatalf("Count tasks: %v", err)
+	}
+
+	tasks, err := db.GetTasks(session.ID)
+	if err != nil {
+		logger.Fatalf("Get tasks: %v", err)
+	}
+
+	eventCount, err := db.EventCount(session.ID)
+	if err != nil {
+		logger.Fatalf("Event count: %v", err)
+	}
+
+	total := 0
+	for _, c := range counts {
+		total += c
+	}
+
+	fmt.Println("")
+	fmt.Println("══════════════════════════════════════════════════")
+	fmt.Println("  🐝 Queen Bee — Session Status")
+	fmt.Println("══════════════════════════════════════════════════")
+	fmt.Printf("  Session:    %s\n", session.ID)
+	fmt.Printf("  Objective:  %s\n", session.Objective)
+	fmt.Printf("  Status:     %s\n", session.Status)
+	fmt.Printf("  Started:    %s\n", session.CreatedAt)
+	fmt.Printf("  Updated:    %s\n", session.UpdatedAt)
+	fmt.Printf("  Events:     %d\n", eventCount)
+	fmt.Println("")
+	fmt.Printf("  Tasks: %d total\n", total)
+	for _, st := range []string{"complete", "running", "pending", "failed", "cancelled", "retrying"} {
+		if c, ok := counts[st]; ok && c > 0 {
+			icon := statusIcon(st)
+			fmt.Printf("    %s %-10s %d\n", icon, st, c)
+		}
+	}
+	fmt.Println("")
+
+	if len(tasks) > 0 {
+		fmt.Println("  Task Details:")
+		for _, t := range tasks {
+			icon := statusIcon(t.Status)
+			worker := ""
+			if t.WorkerID != nil && *t.WorkerID != "" {
+				worker = fmt.Sprintf(" (worker: %s)", *t.WorkerID)
+			}
+			fmt.Printf("    %s [%s] %s%s\n", icon, t.Type, t.Title, worker)
+		}
+		fmt.Println("")
+	}
+}
+
+// cmdStatusJSONL is the legacy fallback that parses log.jsonl.
+func cmdStatusJSONL(logPath string, logger *log.Logger) {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		logger.Fatalf("Read log: %v", err)
+	}
+
+	// Parse events from JSONL
+	var objective string
+	taskNames := make(map[string]string)  // id -> title
+	taskStatus := make(map[string]string) // id -> status
+	taskTypes := make(map[string]string)  // id -> type
+	var lastPhase string
+	var startTime string
+	var eventCount int
+
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		eventCount++
+
+		var ev struct {
+			Type string          `json:"type"`
+			Ts   string          `json:"ts"`
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+
+		switch ev.Type {
+		case "queen.start":
+			var d struct {
+				Objective string `json:"objective"`
+			}
+			json.Unmarshal(ev.Data, &d)
+			objective = d.Objective
+			startTime = ev.Ts
+
+		case "task.created":
+			var d struct {
+				Payload struct {
+					ID    string `json:"id"`
+					Title string `json:"title"`
+					Type  string `json:"type"`
+				} `json:"payload"`
+			}
+			json.Unmarshal(ev.Data, &d)
+			if d.Payload.ID != "" {
+				taskNames[d.Payload.ID] = d.Payload.Title
+				taskTypes[d.Payload.ID] = d.Payload.Type
+				if _, ok := taskStatus[d.Payload.ID]; !ok {
+					taskStatus[d.Payload.ID] = "pending"
+				}
+			}
+
+		case "task.status_changed":
+			var d struct {
+				TaskID  string            `json:"task_id"`
+				Payload map[string]string `json:"payload"`
+			}
+			json.Unmarshal(ev.Data, &d)
+			if d.TaskID != "" {
+				if newSt, ok := d.Payload["new"]; ok {
+					taskStatus[d.TaskID] = newSt
+				}
+			}
+
+		case "queen.plan":
+			lastPhase = "plan"
+		case "queen.delegate":
+			lastPhase = "delegate"
+		case "queen.done":
+			lastPhase = "done"
+		case "queen.failed":
+			lastPhase = "failed"
+		}
+	}
+
+	if objective == "" {
+		fmt.Println("Hive initialized but no sessions run yet.")
+		return
+	}
+
+	// Count statuses
+	counts := make(map[string]int)
+	for _, s := range taskStatus {
+		counts[s]++
+	}
+	total := len(taskStatus)
+
+	fmt.Println("")
+	fmt.Println("══════════════════════════════════════════════════")
+	fmt.Println("  🐝 Queen Bee — Session Status (legacy)")
+	fmt.Println("══════════════════════════════════════════════════")
+	fmt.Printf("  Objective:  %s\n", objective)
+	fmt.Printf("  Started:    %s\n", startTime)
+	fmt.Printf("  Events:     %d\n", eventCount)
+	if lastPhase != "" {
+		fmt.Printf("  Last Phase: %s\n", lastPhase)
+	}
+	fmt.Println("")
+	fmt.Printf("  Tasks: %d total\n", total)
+	for _, st := range []string{"complete", "running", "pending", "failed", "cancelled", "retrying"} {
+		if c, ok := counts[st]; ok && c > 0 {
+			icon := statusIcon(st)
+			fmt.Printf("    %s %-10s %d\n", icon, st, c)
+		}
+	}
+	fmt.Println("")
+
+	// List tasks
+	fmt.Println("  Task Details:")
+	for id, title := range taskNames {
+		st := taskStatus[id]
+		icon := statusIcon(st)
+		tp := taskTypes[id]
+		fmt.Printf("    %s [%s] %s\n", icon, tp, title)
+	}
+	fmt.Println("")
+}
+
+func statusIcon(st string) string {
+	switch st {
+	case "complete":
+		return "✅"
+	case "running":
+		return "🔄"
+	case "pending":
+		return "⏳"
+	case "failed":
+		return "❌"
+	case "cancelled":
+		return "⛔"
+	case "retrying":
+		return "🔁"
+	default:
+		return "❓"
+	}
 }
 
 func cmdRun(objective, configPath, projectDir, defaultAdapter string, maxWorkers int, tasksFile string, verbose bool, logger *log.Logger) {
