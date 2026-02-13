@@ -3,10 +3,13 @@ package adapter
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"sync"
 
+	"github.com/exedev/queen-bee/internal/errors"
+	"github.com/exedev/queen-bee/internal/safety"
 	"github.com/exedev/queen-bee/internal/task"
 	"github.com/exedev/queen-bee/internal/worker"
 )
@@ -16,9 +19,10 @@ type CodexAdapter struct {
 	command string
 	args    []string
 	workDir string
+	guard   *safety.Guard
 }
 
-func NewCodexAdapter(command string, args []string, workDir string) *CodexAdapter {
+func NewCodexAdapter(command string, args []string, workDir string, guard *safety.Guard) *CodexAdapter {
 	if command == "" {
 		command = "codex"
 	}
@@ -26,6 +30,7 @@ func NewCodexAdapter(command string, args []string, workDir string) *CodexAdapte
 		command: command,
 		args:    args,
 		workDir: workDir,
+		guard:   guard,
 	}
 }
 
@@ -41,6 +46,7 @@ func (a *CodexAdapter) CreateWorker(id string) worker.Bee {
 		id:      id,
 		adapter: a,
 		status:  worker.StatusIdle,
+		guard:   a.guard,
 	}
 }
 
@@ -53,6 +59,7 @@ type CodexWorker struct {
 	output  strings.Builder
 	cmd     *exec.Cmd
 	mu      sync.Mutex
+	guard   *safety.Guard
 }
 
 func (w *CodexWorker) ID() string   { return w.id }
@@ -61,6 +68,33 @@ func (w *CodexWorker) Type() string { return "codex" }
 func (w *CodexWorker) Spawn(ctx context.Context, t *task.Task) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	// Safety check: validate task paths if guard is configured
+	if w.guard != nil {
+		if err := w.guard.ValidateTaskPaths(t.AllowedPaths); err != nil {
+			w.status = worker.StatusFailed
+			w.result = &task.Result{
+				Success: false,
+				Errors:  []string{fmt.Sprintf("safety check failed: %v", err)},
+			}
+			return nil
+		}
+
+		// Safety check: check for blocked commands in task description
+		if err := w.guard.CheckCommand(t.Description); err != nil {
+			w.status = worker.StatusFailed
+			w.result = &task.Result{
+				Success: false,
+				Errors:  []string{fmt.Sprintf("safety check failed: %v", err)},
+			}
+			return nil
+		}
+
+		// Add read-only mode warning to prompt if enabled
+		if w.guard.IsReadOnly() {
+			t.Description = "[SAFETY WARNING: System is in read-only mode]\n\n" + t.Description
+		}
+	}
 
 	prompt := buildPrompt(t)
 
@@ -80,7 +114,22 @@ func (w *CodexWorker) Spawn(ctx context.Context, t *task.Task) error {
 
 	w.status = worker.StatusRunning
 
+	// Run async with panic recovery
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				recovery := errors.RecoverPanic(r)
+				w.mu.Lock()
+				defer w.mu.Unlock()
+				w.status = worker.StatusFailed
+				w.result = &task.Result{
+					Success: false,
+					Output:  w.output.String(),
+					Errors:  []string{recovery.ErrorMsg},
+				}
+			}
+		}()
+
 		err := w.cmd.Run()
 
 		w.mu.Lock()
@@ -94,10 +143,16 @@ func (w *CodexWorker) Spawn(ctx context.Context, t *task.Task) error {
 
 		if err != nil {
 			w.status = worker.StatusFailed
+			// Classify error for retry decisions
+			errType := errors.ClassifyErrorWithExitCode(err, getExitCode(err))
+			errMsg := err.Error()
+			if errType == errors.ErrorTypeRetryable {
+				errMsg = fmt.Sprintf("[retryable] %s", err.Error())
+			}
 			w.result = &task.Result{
 				Success: false,
 				Output:  stdout.String(),
-				Errors:  []string{err.Error(), stderr.String()},
+				Errors:  []string{errMsg, stderr.String()},
 			}
 		} else {
 			w.status = worker.StatusComplete

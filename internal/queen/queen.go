@@ -260,6 +260,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 			cfg.Adapters["shelley"].Command,
 			cfg.Adapters["shelley"].Args,
 			cfg.ProjectDir,
+			guard,
 		))
 	}
 
@@ -555,6 +556,14 @@ func (q *Queen) delegate(ctx context.Context) error {
 			continue
 		}
 
+		// Inject default scope constraints into every task
+		t.Constraints = appendUnique(t.Constraints,
+			"Do NOT make changes outside the scope described in this task",
+			"Do NOT refactor, reorganize, or 'improve' code unrelated to this task",
+			"Do NOT modify function signatures unless explicitly asked to",
+			"If you find issues outside your scope, note them in your output but do NOT fix them",
+		)
+
 		bee, err := q.pool.Spawn(ctx, t, adapterName)
 		if err != nil {
 			q.logger.Printf("  ⚠ Failed to spawn worker for %s: %v", t.ID, err)
@@ -830,14 +839,25 @@ func (q *Queen) buildPlanPrompt() string {
 	var b strings.Builder
 	b.WriteString("You are a task planning agent. Decompose the following objective into discrete, parallelizable tasks.\n\n")
 	b.WriteString(fmt.Sprintf("OBJECTIVE: %s\n\n", q.objective))
+
+	b.WriteString("IMPORTANT PLANNING RULES:\n")
+	b.WriteString("- Each task MUST be narrowly scoped to exactly one concern\n")
+	b.WriteString("- Tasks MUST NOT make changes outside their described scope\n")
+	b.WriteString("- Each task should include a \"constraints\" field listing what it must NOT do\n")
+	b.WriteString("- Each task should include an \"allowed_paths\" field listing which files/dirs it may touch\n")
+	b.WriteString("- Prefer more small focused tasks over fewer broad tasks\n")
+	b.WriteString("- DO NOT combine unrelated changes into one task\n\n")
+
 	b.WriteString("Output a JSON array of tasks. Each task should have:\n")
-	b.WriteString(`- "id": unique string identifier\n`)
-	b.WriteString(`- "type": one of "code", "research", "test", "review", "generic"\n`)
-	b.WriteString(`- "title": short title\n`)
-	b.WriteString(`- "description": detailed description of what to do\n`)
-	b.WriteString(`- "priority": 0-3 (0=low, 3=critical)\n`)
-	b.WriteString(`- "depends_on": array of task IDs this depends on (empty if independent)\n`)
-	b.WriteString(`- "max_retries": number of retries allowed (default 2)\n`)
+	b.WriteString(`- "id": unique string identifier` + "\n")
+	b.WriteString(`- "type": one of "code", "research", "test", "review", "generic"` + "\n")
+	b.WriteString(`- "title": short title` + "\n")
+	b.WriteString(`- "description": detailed description of what to do (be specific and narrow)` + "\n")
+	b.WriteString(`- "constraints": array of strings — things this task MUST NOT do (e.g., "Do not modify any files", "Only read, do not write", "Do not change function signatures", "Do not refactor code outside the described scope")` + "\n")
+	b.WriteString(`- "allowed_paths": array of file/directory paths this task may read or modify (e.g., ["internal/queen/queen.go", "internal/queen/"])` + "\n")
+	b.WriteString(`- "priority": 0-3 (0=low, 3=critical)` + "\n")
+	b.WriteString(`- "depends_on": array of task IDs this depends on (empty if independent)` + "\n")
+	b.WriteString(`- "max_retries": number of retries allowed (default 2)` + "\n")
 	b.WriteString("\nOutput ONLY the JSON array, no other text.\n")
 
 	// Include blackboard context if available
@@ -882,16 +902,18 @@ func (q *Queen) parsePlanOutput(output string) ([]*task.Task, error) {
 	tasks := make([]*task.Task, 0, len(rawTasks))
 	for _, rt := range rawTasks {
 		t := &task.Task{
-			ID:          jsonStr_s(rt, "id"),
-			Type:        task.Type(jsonStr_s(rt, "type")),
-			Status:      task.StatusPending,
-			Priority:    task.Priority(jsonInt(rt, "priority")),
-			Title:       jsonStr_s(rt, "title"),
-			Description: jsonStr_s(rt, "description"),
-			DependsOn:   jsonStrSlice(rt, "depends_on"),
-			MaxRetries:  jsonInt(rt, "max_retries"),
-			CreatedAt:   time.Now(),
-			Timeout:     q.cfg.Workers.DefaultTimeout,
+			ID:           jsonStr_s(rt, "id"),
+			Type:         task.Type(jsonStr_s(rt, "type")),
+			Status:       task.StatusPending,
+			Priority:     task.Priority(jsonInt(rt, "priority")),
+			Title:        jsonStr_s(rt, "title"),
+			Description:  jsonStr_s(rt, "description"),
+			Constraints:  jsonStrSlice(rt, "constraints"),
+			AllowedPaths: jsonStrSlice(rt, "allowed_paths"),
+			DependsOn:    jsonStrSlice(rt, "depends_on"),
+			MaxRetries:   jsonInt(rt, "max_retries"),
+			CreatedAt:    time.Now(),
+			Timeout:      q.cfg.Workers.DefaultTimeout,
 		}
 		if t.ID == "" {
 			t.ID = fmt.Sprintf("task-%d", time.Now().UnixNano())
@@ -968,7 +990,12 @@ func (q *Queen) Close() error {
 	if q.sessionID != "" {
 		// Save current phase for potential resumption
 		q.savePhase()
-		q.db.UpdateSessionStatus(q.sessionID, "stopped")
+		// Only set status to 'stopped' if current status is not terminal
+		if session, err := q.db.GetSession(q.sessionID); err == nil {
+			if session.Status != "done" && session.Status != "failed" {
+				q.db.UpdateSessionStatus(q.sessionID, "stopped")
+			}
+		}
 	}
 	q.db.Close()
 	return q.store.Close()
@@ -1078,6 +1105,21 @@ func (q *Queen) printReport() {
 }
 
 // --- JSON parsing helpers (tolerant of LLM output variations) ---
+
+// appendUnique appends items to a slice, skipping duplicates.
+func appendUnique(slice []string, items ...string) []string {
+	existing := make(map[string]bool, len(slice))
+	for _, s := range slice {
+		existing[s] = true
+	}
+	for _, item := range items {
+		if !existing[item] {
+			slice = append(slice, item)
+			existing[item] = true
+		}
+	}
+	return slice
+}
 
 func jsonStr_s(m map[string]interface{}, key string) string {
 	v, ok := m[key]

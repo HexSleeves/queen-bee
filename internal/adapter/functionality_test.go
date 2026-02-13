@@ -22,7 +22,7 @@ func TestClaudeAdapterFunctionality(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	adapter := NewClaudeAdapter("echo", []string{}, tempDir)
+	adapter := NewClaudeAdapter("echo", []string{}, tempDir, nil)
 	worker := adapter.CreateWorker("claude-test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -82,7 +82,7 @@ func TestCodexAdapterFunctionality(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	adapter := NewCodexAdapter("echo", []string{}, tempDir)
+	adapter := NewCodexAdapter("echo", []string{}, tempDir, nil)
 	worker := adapter.CreateWorker("codex-test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -138,7 +138,7 @@ func TestOpenCodeAdapterFunctionality(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	adapter := NewOpenCodeAdapter("echo", []string{}, tempDir)
+	adapter := NewOpenCodeAdapter("echo", []string{}, tempDir, nil)
 	worker := adapter.CreateWorker("opencode-test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -188,9 +188,9 @@ func TestAdapterTaskTypes(t *testing.T) {
 	tempDir := t.TempDir()
 
 	adapters := map[string]Adapter{
-		"claude-code": NewClaudeAdapter("echo", []string{}, tempDir),
-		"codex":       NewCodexAdapter("echo", []string{}, tempDir),
-		"opencode":    NewOpenCodeAdapter("echo", []string{}, tempDir),
+		"claude-code": NewClaudeAdapter("echo", []string{}, tempDir, nil),
+		"codex":       NewCodexAdapter("echo", []string{}, tempDir, nil),
+		"opencode":    NewOpenCodeAdapter("echo", []string{}, tempDir, nil),
 	}
 
 	taskTypes := []task.Type{
@@ -252,9 +252,9 @@ func TestAdapterErrorHandling(t *testing.T) {
 		adapter Adapter
 		command string
 	}{
-		{"ClaudeError", NewClaudeAdapter("false", []string{}, tempDir), "false"},
-		{"CodexError", NewCodexAdapter("false", []string{}, tempDir), "false"},
-		{"OpenCodeError", NewOpenCodeAdapter("false", []string{}, tempDir), "false"},
+		{"ClaudeError", NewClaudeAdapter("false", []string{}, tempDir, nil), "false"},
+		{"CodexError", NewCodexAdapter("false", []string{}, tempDir, nil), "false"},
+		{"OpenCodeError", NewOpenCodeAdapter("false", []string{}, tempDir, nil), "false"},
 	}
 
 	for _, tt := range tests {
@@ -306,7 +306,7 @@ func TestAdapterTimeout(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Use sleep command to simulate long-running task
-	adapter := NewClaudeAdapter("sleep", []string{"30"}, tempDir)
+	adapter := NewClaudeAdapter("sleep", []string{"30"}, tempDir, nil)
 	worker := adapter.CreateWorker("timeout-test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -340,7 +340,7 @@ func TestAdapterTimeout(t *testing.T) {
 // TestAdapterConcurrency tests concurrent worker execution
 func TestAdapterConcurrency(t *testing.T) {
 	tempDir := t.TempDir()
-	adapter := NewClaudeAdapter("echo", []string{}, tempDir)
+	adapter := NewClaudeAdapter("echo", []string{}, tempDir, nil)
 
 	const numWorkers = 5
 	workers := make([]worker.Bee, numWorkers)
@@ -451,7 +451,7 @@ func TestAdapterWorkingDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Use a simple command that shows current directory
-	adapter := NewClaudeAdapter("echo", []string{"working in $(pwd)"}, tempDir)
+	adapter := NewClaudeAdapter("echo", []string{"working in $(pwd)"}, tempDir, nil)
 	worker := adapter.CreateWorker("wd-test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

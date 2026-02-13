@@ -1,6 +1,7 @@
 package bus
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -74,10 +75,24 @@ func (b *MessageBus) Publish(msg Message) {
 	b.mu.Unlock()
 
 	for _, h := range specific {
-		h(msg)
+		func(handler Handler) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[MessageBus] Handler panicked for message type %s: %v", msg.Type, r)
+				}
+			}()
+			handler(msg)
+		}(h)
 	}
 	for _, h := range wildcard {
-		h(msg)
+		func(handler Handler) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[MessageBus] Wildcard handler panicked for message type %s: %v", msg.Type, r)
+				}
+			}()
+			handler(msg)
+		}(h)
 	}
 }
 

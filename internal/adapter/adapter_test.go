@@ -71,7 +71,7 @@ func TestTaskRouter(t *testing.T) {
 // TestClaudeAdapter tests Claude adapter functionality
 func TestClaudeAdapter(t *testing.T) {
 	tempDir := t.TempDir()
-	adapter := NewClaudeAdapter("echo", []string{}, tempDir)
+	adapter := NewClaudeAdapter("echo", []string{}, tempDir, nil)
 
 	if adapter.Name() != "claude-code" {
 		t.Errorf("expected name claude-code, got %s", adapter.Name())
@@ -90,7 +90,7 @@ func TestClaudeAdapter(t *testing.T) {
 // TestCodexAdapter tests Codex adapter functionality
 func TestCodexAdapter(t *testing.T) {
 	tempDir := t.TempDir()
-	adapter := NewCodexAdapter("echo", []string{}, tempDir)
+	adapter := NewCodexAdapter("echo", []string{}, tempDir, nil)
 
 	if adapter.Name() != "codex" {
 		t.Errorf("expected name codex, got %s", adapter.Name())
@@ -109,7 +109,7 @@ func TestCodexAdapter(t *testing.T) {
 // TestOpenCodeAdapter tests OpenCode adapter functionality
 func TestOpenCodeAdapter(t *testing.T) {
 	tempDir := t.TempDir()
-	adapter := NewOpenCodeAdapter("echo", []string{}, tempDir)
+	adapter := NewOpenCodeAdapter("echo", []string{}, tempDir, nil)
 
 	if adapter.Name() != "opencode" {
 		t.Errorf("expected name opencode, got %s", adapter.Name())
@@ -132,9 +132,9 @@ func TestWorkerExecution(t *testing.T) {
 		adapter  Adapter
 		taskType task.Type
 	}{
-		{"ClaudeWorker", NewClaudeAdapter("echo", []string{}, t.TempDir()), task.TypeCode},
-		{"CodexWorker", NewCodexAdapter("echo", []string{}, t.TempDir()), task.TypeResearch},
-		{"OpenCodeWorker", NewOpenCodeAdapter("echo", []string{}, t.TempDir()), task.TypeTest},
+		{"ClaudeWorker", NewClaudeAdapter("echo", []string{}, t.TempDir(), nil), task.TypeCode},
+		{"CodexWorker", NewCodexAdapter("echo", []string{}, t.TempDir(), nil), task.TypeResearch},
+		{"OpenCodeWorker", NewOpenCodeAdapter("echo", []string{}, t.TempDir(), nil), task.TypeTest},
 	}
 
 	for _, tt := range tests {
@@ -190,7 +190,7 @@ func TestWorkerKill(t *testing.T) {
 	}
 
 	// Use a longer-running command to ensure it doesn't finish immediately
-	adapter := NewClaudeAdapter("sleep", []string{"5"}, t.TempDir())
+	adapter := NewClaudeAdapter("sleep", []string{"5"}, t.TempDir(), nil)
 	worker := adapter.CreateWorker("test-worker")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -258,13 +258,13 @@ func TestOpenCodeAdapterPathResolution(t *testing.T) {
 	}
 
 	// Test with absolute path
-	adapter := NewOpenCodeAdapter(fakeOpenCode, []string{}, tempDir)
+	adapter := NewOpenCodeAdapter(fakeOpenCode, []string{}, tempDir, nil)
 	if !adapter.Available() {
 		t.Error("expected adapter to be available with absolute path")
 	}
 
 	// Test with relative path - this might pass due to system PATH
-	adapter2 := NewOpenCodeAdapter("nonexistent-opencode-definitely-not-real", []string{}, tempDir)
+	adapter2 := NewOpenCodeAdapter("nonexistent-opencode-definitely-not-real", []string{}, tempDir, nil)
 	if adapter2.Available() {
 		t.Log("nonexistent command was available (likely in PATH), skipping this check")
 	}

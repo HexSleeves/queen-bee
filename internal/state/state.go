@@ -142,13 +142,13 @@ func (s *Store) ReadLog() ([]Event, error) {
 	f, err := os.Open(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return []Event{}, nil
 		}
 		return nil, err
 	}
 	defer f.Close()
 
-	var events []Event
+	events := []Event{}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
 	for scanner.Scan() {

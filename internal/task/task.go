@@ -11,13 +11,13 @@ import (
 type Status string
 
 const (
-	StatusPending    Status = "pending"
-	StatusAssigned   Status = "assigned"
-	StatusRunning    Status = "running"
-	StatusComplete   Status = "complete"
-	StatusFailed     Status = "failed"
-	StatusRetrying   Status = "retrying"
-	StatusCancelled  Status = "cancelled"
+	StatusPending   Status = "pending"
+	StatusAssigned  Status = "assigned"
+	StatusRunning   Status = "running"
+	StatusComplete  Status = "complete"
+	StatusFailed    Status = "failed"
+	StatusRetrying  Status = "retrying"
+	StatusCancelled Status = "cancelled"
 )
 
 type Priority int
@@ -47,12 +47,15 @@ type Task struct {
 	Priority     Priority          `json:"priority"`
 	Title        string            `json:"title"`
 	Description  string            `json:"description"`
+	Constraints  []string          `json:"constraints,omitempty"`
 	Context      map[string]string `json:"context,omitempty"`
 	AllowedPaths []string          `json:"allowed_paths,omitempty"`
 	WorkerID     string            `json:"worker_id,omitempty"`
 	Result       *Result           `json:"result,omitempty"`
 	MaxRetries   int               `json:"max_retries"`
 	RetryCount   int               `json:"retry_count"`
+	LastError    string            `json:"last_error,omitempty"`
+	LastErrorType string           `json:"last_error_type,omitempty"`
 	CreatedAt    time.Time         `json:"created_at"`
 	StartedAt    *time.Time        `json:"started_at,omitempty"`
 	CompletedAt  *time.Time        `json:"completed_at,omitempty"`

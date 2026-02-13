@@ -11,8 +11,8 @@ import (
 
 // Guard enforces safety constraints on worker operations
 type Guard struct {
-	cfg          config.SafetyConfig
-	projectRoot  string
+	cfg           config.SafetyConfig
+	projectRoot   string
 	resolvedPaths []string
 }
 

@@ -36,7 +36,7 @@ fi
 `)
 
 	tempDir := t.TempDir()
-	adapter := NewClaudeAdapter(mockScript, []string{}, tempDir)
+	adapter := NewClaudeAdapter(mockScript, []string{}, tempDir, nil)
 
 	if !adapter.Available() {
 		t.Fatal("expected mock Claude adapter to be available")
@@ -151,7 +151,7 @@ fi
 `)
 
 	tempDir := t.TempDir()
-	adapter := NewCodexAdapter(mockScript, []string{}, tempDir)
+	adapter := NewCodexAdapter(mockScript, []string{}, tempDir, nil)
 
 	if !adapter.Available() {
 		t.Fatal("expected mock Codex adapter to be available")
@@ -253,7 +253,7 @@ fi
 `)
 
 	tempDir := t.TempDir()
-	adapter := NewOpenCodeAdapter(mockScript, []string{}, tempDir)
+	adapter := NewOpenCodeAdapter(mockScript, []string{}, tempDir, nil)
 
 	if !adapter.Available() {
 		t.Fatal("expected mock OpenCode adapter to be available")
@@ -347,11 +347,11 @@ func TestMockAPIFailover(t *testing.T) {
 	workingScript := createMockScript(t, "working-mock", `#!/bin/bash
 echo "Working response: $@"
 `)
-	workingAdapter := NewClaudeAdapter(workingScript, []string{}, tempDir)
+	workingAdapter := NewClaudeAdapter(workingScript, []string{}, tempDir, nil)
 	registry.Register(workingAdapter)
 
 	// Add a non-working adapter
-	nonWorkingAdapter := NewClaudeAdapter("nonexistent-cli", []string{}, tempDir)
+	nonWorkingAdapter := NewClaudeAdapter("nonexistent-cli", []string{}, tempDir, nil)
 	registry.Register(nonWorkingAdapter)
 
 	// Test that only working adapter is available
@@ -422,7 +422,7 @@ fi
 `)
 
 	tempDir := t.TempDir()
-	adapter := NewClaudeAdapter(mockScript, []string{}, tempDir)
+	adapter := NewClaudeAdapter(mockScript, []string{}, tempDir, nil)
 
 	const numRequests = 5
 	successCount := 0
@@ -485,7 +485,7 @@ echo "Response for hash $hash: $prompt"
 `)
 
 	tempDir := t.TempDir()
-	adapter := NewClaudeAdapter(mockScript, []string{}, tempDir)
+	adapter := NewClaudeAdapter(mockScript, []string{}, tempDir, nil)
 
 	description := "Consistent test request"
 	responses := make(map[string]string)

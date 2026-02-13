@@ -129,7 +129,10 @@ func (bb *Blackboard) History() []*Entry {
 	bb.mu.RLock()
 	defer bb.mu.RUnlock()
 	cp := make([]*Entry, len(bb.history))
-	copy(cp, bb.history)
+	for i, e := range bb.history {
+		entryCopy := *e
+		cp[i] = &entryCopy
+	}
 	return cp
 }
 

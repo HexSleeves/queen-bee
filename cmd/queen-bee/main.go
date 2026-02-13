@@ -495,16 +495,83 @@ func cmdRun(objective, configPath, projectDir, defaultAdapter string, maxWorkers
 }
 
 func cmdResume(configPath, projectDir, defaultAdapter string, maxWorkers int, verbose bool, logger *log.Logger) {
-	// Load saved objective from state
-	statePath := filepath.Join(projectDir, ".hive", "state.json")
-	if _, err := os.Stat(statePath); os.IsNotExist(err) {
+	hiveDir := filepath.Join(projectDir, ".hive")
+	dbPath := filepath.Join(hiveDir, "hive.db")
+
+	// Check if hive and database exist
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		logger.Fatal("No session to resume. Run 'queen-bee run <objective>' first.")
 	}
 
-	logger.Println("🔄 Resuming previous session...")
-	// For now, read objective from state and re-run
-	// The Queen's plan phase will pick up existing tasks from the store
-	cmdRun("[resumed session]", configPath, projectDir, defaultAdapter, maxWorkers, "", verbose, logger)
+	// Open the database and find the latest resumable session
+	db, err := state.OpenDB(hiveDir)
+	if err != nil {
+		logger.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	session, err := db.FindResumableSession()
+	if err != nil {
+		logger.Fatal("No interrupted session found to resume. Run 'queen-bee run <objective>' to start a new session.")
+	}
+
+	logger.Printf("🔄 Resuming session: %s", session.ID)
+	logger.Printf("   Objective: %s", session.Objective)
+	logger.Printf("   Status: %s", session.Status)
+
+	// Load configuration
+	cfg := loadConfig(configPath, projectDir, defaultAdapter, maxWorkers)
+
+	if verbose {
+		logger.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	}
+
+	fmt.Println("")
+	fmt.Println("══════════════════════════════════════════════════")
+	fmt.Println("  🐝 Queen Bee - Agent Orchestration System")
+	fmt.Println("  🔄 Resuming Interrupted Session")
+	fmt.Println("══════════════════════════════════════════════════")
+	fmt.Printf("  Session ID: %s\n", session.ID)
+	fmt.Printf("  Objective: %s\n", session.Objective)
+	fmt.Printf("  Adapter:   %s\n", cfg.Workers.DefaultAdapter)
+	fmt.Printf("  Workers:   %d max parallel\n", cfg.Workers.MaxParallel)
+	fmt.Println("")
+
+	// Create queen instance
+	q, err := queen.New(cfg, logger)
+	if err != nil {
+		logger.Fatalf("Init queen: %v", err)
+	}
+	defer q.Close()
+
+	// Resume the session - this loads all tasks from the database
+	objective, err := q.ResumeSession(session.ID)
+	if err != nil {
+		logger.Fatalf("Failed to resume session: %v", err)
+	}
+
+	// Handle graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigs
+		logger.Println("\n⛔ Received shutdown signal, gracefully stopping...")
+		cancel()
+	}()
+
+	// Run with the resumed session (objective is already set by ResumeSession)
+	if err := q.Run(ctx, objective); err != nil {
+		logger.Fatalf("❌ Queen failed: %v", err)
+	}
+
+	fmt.Println("")
+	fmt.Println("══════════════════════════════════════════════════")
+	fmt.Println("  ✅ Mission Complete")
+	fmt.Println("══════════════════════════════════════════════════")
 }
 
 func loadTasksFile(path string, cfg *config.Config) ([]*task.Task, error) {

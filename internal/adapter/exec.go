@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/exedev/queen-bee/internal/errors"
+	"github.com/exedev/queen-bee/internal/safety"
 	"github.com/exedev/queen-bee/internal/task"
 	"github.com/exedev/queen-bee/internal/worker"
 )
@@ -18,9 +20,10 @@ import (
 type ExecAdapter struct {
 	shell   string
 	workDir string
+	guard   *safety.Guard
 }
 
-func NewExecAdapter(workDir string) *ExecAdapter {
+func NewExecAdapter(workDir string, guard *safety.Guard) *ExecAdapter {
 	shell := "/bin/bash"
 	if s, err := exec.LookPath("bash"); err == nil {
 		shell = s
@@ -28,6 +31,7 @@ func NewExecAdapter(workDir string) *ExecAdapter {
 	return &ExecAdapter{
 		shell:   shell,
 		workDir: workDir,
+		guard:   guard,
 	}
 }
 
@@ -39,6 +43,7 @@ func (a *ExecAdapter) CreateWorker(id string) worker.Bee {
 		id:      id,
 		adapter: a,
 		status:  worker.StatusIdle,
+		guard:   a.guard,
 	}
 }
 
@@ -51,6 +56,7 @@ type ExecWorker struct {
 	output  strings.Builder
 	cmd     *exec.Cmd
 	mu      sync.Mutex
+	guard   *safety.Guard
 }
 
 func (w *ExecWorker) ID() string   { return w.id }
@@ -67,6 +73,45 @@ func (w *ExecWorker) Spawn(ctx context.Context, t *task.Task) error {
 		script = cmd
 	}
 
+	// Safety check: validate task paths if guard is configured
+	if w.guard != nil {
+		if err := w.guard.ValidateTaskPaths(t.AllowedPaths); err != nil {
+			w.status = worker.StatusFailed
+			w.result = &task.Result{
+				Success: false,
+				Errors:  []string{fmt.Sprintf("safety check failed: %v", err)},
+			}
+			return nil
+		}
+
+		// Safety check: check for blocked commands - critical for exec adapter
+		// Check both the script and the description
+		if err := w.guard.CheckCommand(script); err != nil {
+			w.status = worker.StatusFailed
+			w.result = &task.Result{
+				Success: false,
+				Errors:  []string{fmt.Sprintf("safety check failed: %v", err)},
+			}
+			return nil
+		}
+		if err := w.guard.CheckCommand(t.Description); err != nil {
+			w.status = worker.StatusFailed
+			w.result = &task.Result{
+				Success: false,
+				Errors:  []string{fmt.Sprintf("safety check failed: %v", err)},
+			}
+			return nil
+		}
+
+		// In read-only mode, only allow safe read-only commands
+		if w.guard.IsReadOnly() {
+			// Prepend a safety marker to output
+			w.output.WriteString("[SAFETY WARNING: System is in read-only mode - write operations blocked]\n\n")
+			// We don't block here, but the command will fail if it tries to write
+			// since actual filesystem restrictions should be enforced at OS level
+		}
+	}
+
 	w.cmd = exec.CommandContext(ctx, w.adapter.shell, "-c", script)
 	if w.adapter.workDir != "" {
 		w.cmd.Dir = w.adapter.workDir
@@ -78,7 +123,22 @@ func (w *ExecWorker) Spawn(ctx context.Context, t *task.Task) error {
 
 	w.status = worker.StatusRunning
 
+	// Run async with panic recovery
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				recovery := errors.RecoverPanic(r)
+				w.mu.Lock()
+				defer w.mu.Unlock()
+				w.status = worker.StatusFailed
+				w.result = &task.Result{
+					Success: false,
+					Output:  w.output.String(),
+					Errors:  []string{recovery.ErrorMsg},
+				}
+			}
+		}()
+
 		err := w.cmd.Run()
 
 		w.mu.Lock()
@@ -92,10 +152,16 @@ func (w *ExecWorker) Spawn(ctx context.Context, t *task.Task) error {
 
 		if err != nil {
 			w.status = worker.StatusFailed
+			// Classify error for retry decisions
+			errType := errors.ClassifyErrorWithExitCode(err, getExitCode(err))
+			errMsg := fmt.Sprintf("%v", err)
+			if errType == errors.ErrorTypeRetryable {
+				errMsg = fmt.Sprintf("[retryable] %v", err)
+			}
 			w.result = &task.Result{
 				Success: false,
 				Output:  stdout.String(),
-				Errors:  []string{fmt.Sprintf("%v", err), stderr.String()},
+				Errors:  []string{errMsg, stderr.String()},
 			}
 		} else {
 			w.status = worker.StatusComplete

@@ -51,6 +51,8 @@ func (s *DB) migrate() error {
 		id          TEXT PRIMARY KEY,
 		objective   TEXT NOT NULL,
 		status      TEXT NOT NULL DEFAULT 'running',
+		phase       TEXT DEFAULT 'plan',
+		iteration   INTEGER DEFAULT 0,
 		created_at  TEXT NOT NULL,
 		updated_at  TEXT NOT NULL
 	);
@@ -80,6 +82,7 @@ func (s *DB) migrate() error {
 		result      TEXT,
 		max_retries INTEGER NOT NULL DEFAULT 2,
 		retry_count INTEGER NOT NULL DEFAULT 0,
+		result_data TEXT,
 		depends_on  TEXT,
 		timeout_ns  INTEGER,
 		created_at  TEXT NOT NULL,
@@ -113,6 +116,23 @@ func (s *DB) migrate() error {
 }
 
 // --- Session operations ---
+
+// SessionInfoFull includes phase and iteration for resumption.
+type SessionInfoFull struct {
+	SessionInfo
+	Phase     string `json:"phase"`
+	Iteration int    `json:"iteration"`
+}
+
+// GetSessionFull retrieves session info including phase and iteration.
+func (s *DB) GetSessionFull(id string) (*SessionInfoFull, error) {
+	row := s.db.QueryRow(`SELECT id, objective, status, created_at, updated_at, COALESCE(phase, 'plan'), COALESCE(iteration, 0) FROM sessions WHERE id = ?`, id)
+	var si SessionInfoFull
+	if err := row.Scan(&si.ID, &si.Objective, &si.Status, &si.CreatedAt, &si.UpdatedAt, &si.Phase, &si.Iteration); err != nil {
+		return nil, err
+	}
+	return &si, nil
+}
 
 func (s *DB) CreateSession(id, objective string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -158,6 +178,42 @@ func (s *DB) LatestSession() (*SessionInfo, error) {
 	return &si, nil
 }
 
+// FindResumableSession returns the most recent session that is not 'done' and can be resumed.
+// It excludes sessions with status 'done' or 'cancelled'.
+func (s *DB) FindResumableSession() (*SessionInfo, error) {
+	row := s.db.QueryRow(`
+		SELECT id, objective, status, created_at, updated_at 
+		FROM sessions 
+		WHERE status NOT IN ('done', 'cancelled') 
+		ORDER BY created_at DESC LIMIT 1`)
+	var si SessionInfo
+	if err := row.Scan(&si.ID, &si.Objective, &si.Status, &si.CreatedAt, &si.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &si, nil
+}
+
+// UpdateSessionPhase saves the current phase and iteration for session resumption.
+func (s *DB) UpdateSessionPhase(sessionID string, phase string, iteration int) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.Exec(
+		`UPDATE sessions SET phase = ?, iteration = ?, updated_at = ? WHERE id = ?`,
+		phase, iteration, now, sessionID,
+	)
+	return err
+}
+
+// GetSessionPhase retrieves the saved phase and iteration for a session.
+func (s *DB) GetSessionPhase(sessionID string) (string, int, error) {
+	var phase string
+	var iteration int
+	err := s.db.QueryRow(
+		`SELECT COALESCE(phase, 'plan'), COALESCE(iteration, 0) FROM sessions WHERE id = ?`,
+		sessionID,
+	).Scan(&phase, &iteration)
+	return phase, iteration, err
+}
+
 // --- Event log (append-only) ---
 
 func (s *DB) AppendEvent(sessionID, eventType string, data interface{}) (int64, error) {
@@ -198,6 +254,7 @@ type TaskRow struct {
 	Description string  `json:"description"`
 	WorkerID    *string `json:"worker_id,omitempty"`
 	Result      *string `json:"result,omitempty"`
+	ResultData  *string `json:"result_data,omitempty"`
 	MaxRetries  int     `json:"max_retries"`
 	RetryCount  int     `json:"retry_count"`
 	DependsOn   string  `json:"depends_on"`
@@ -210,10 +267,10 @@ func (s *DB) InsertTask(sessionID string, t TaskRow) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.Exec(
 		`INSERT OR REPLACE INTO tasks
-		(id, session_id, type, status, priority, title, description, max_retries, retry_count, depends_on, timeout_ns, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(id, session_id, type, status, priority, title, description, max_retries, retry_count, depends_on, timeout_ns, created_at, result_data)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, sessionID, t.Type, t.Status, t.Priority, t.Title, t.Description,
-		t.MaxRetries, t.RetryCount, t.DependsOn, 0, now,
+		t.MaxRetries, t.RetryCount, t.DependsOn, 0, now, t.ResultData,
 	)
 	return err
 }
@@ -255,8 +312,35 @@ func (s *DB) UpdateTaskResult(sessionID, taskID string, result interface{}) erro
 		return err
 	}
 	_, err = s.db.Exec(
-		`UPDATE tasks SET result = ? WHERE id = ? AND session_id = ?`,
-		string(b), taskID, sessionID,
+		`UPDATE tasks SET result = ?, result_data = ? WHERE id = ? AND session_id = ?`,
+		string(b), string(b), taskID, sessionID,
+	)
+	return err
+}
+
+// UpdateTaskRetryCount sets the retry count for a task.
+func (s *DB) UpdateTaskRetryCount(sessionID, taskID string, retryCount int) error {
+	_, err := s.db.Exec(
+		`UPDATE tasks SET retry_count = ? WHERE id = ? AND session_id = ?`,
+		retryCount, taskID, sessionID,
+	)
+	return err
+}
+
+// UpdateTaskErrorType sets the last error type for a task.
+func (s *DB) UpdateTaskErrorType(sessionID, taskID, errorType string) error {
+	_, err := s.db.Exec(
+		`UPDATE tasks SET result_data = COALESCE(result_data, '{}') WHERE id = ? AND session_id = ?`,
+		taskID, sessionID,
+	)
+	if err != nil {
+		return err
+	}
+	// Store error type in a separate column by using a JSON patch approach
+	// For now, we'll store it in the result_data field as JSON
+	_, err = s.db.Exec(
+		`UPDATE tasks SET result_data = json_set(COALESCE(result_data, '{}'), '$.last_error_type', ?) WHERE id = ? AND session_id = ?`,
+		errorType, taskID, sessionID,
 	)
 	return err
 }
@@ -277,7 +361,7 @@ func (s *DB) IncrementTaskRetry(sessionID, taskID string) (int, error) {
 func (s *DB) GetTask(sessionID, taskID string) (*TaskRow, error) {
 	row := s.db.QueryRow(
 		`SELECT id, session_id, type, status, priority, title, description, worker_id, result,
-		 max_retries, retry_count, depends_on, created_at, started_at, completed_at
+		 max_retries, retry_count, depends_on, created_at, started_at, completed_at, result_data
 		 FROM tasks WHERE id = ? AND session_id = ?`,
 		taskID, sessionID,
 	)
@@ -287,7 +371,7 @@ func (s *DB) GetTask(sessionID, taskID string) (*TaskRow, error) {
 func (s *DB) GetTasks(sessionID string) ([]TaskRow, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, type, status, priority, title, description, worker_id, result,
-		 max_retries, retry_count, depends_on, created_at, started_at, completed_at
+		 max_retries, retry_count, depends_on, created_at, started_at, completed_at, result_data
 		 FROM tasks WHERE session_id = ? ORDER BY priority DESC, created_at`,
 		sessionID,
 	)
@@ -309,7 +393,7 @@ func (s *DB) GetTasks(sessionID string) ([]TaskRow, error) {
 func (s *DB) GetTasksByStatus(sessionID, status string) ([]TaskRow, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, type, status, priority, title, description, worker_id, result,
-		 max_retries, retry_count, depends_on, created_at, started_at, completed_at
+		 max_retries, retry_count, depends_on, created_at, started_at, completed_at, result_data
 		 FROM tasks WHERE session_id = ? AND status = ? ORDER BY priority DESC`,
 		sessionID, status,
 	)
@@ -405,7 +489,7 @@ func scanTask(row scannable) (*TaskRow, error) {
 		&t.ID, &t.SessionID, &t.Type, &t.Status, &t.Priority,
 		&t.Title, &t.Description, &t.WorkerID, &t.Result,
 		&t.MaxRetries, &t.RetryCount, &t.DependsOn,
-		&t.CreatedAt, &t.StartedAt, &t.CompletedAt,
+		&t.CreatedAt, &t.StartedAt, &t.CompletedAt, &t.ResultData,
 	)
 	if err != nil {
 		return nil, err
@@ -415,4 +499,14 @@ func scanTask(row scannable) (*TaskRow, error) {
 
 func scanTaskRows(rows *sql.Rows) (*TaskRow, error) {
 	return scanTask(rows)
+}
+
+// ResetRunningTasks marks all 'running' tasks as 'pending' for session resumption.
+// This should be called when resuming a session to retry tasks that were interrupted.
+func (s *DB) ResetRunningTasks(sessionID string) error {
+	_, err := s.db.Exec(
+		`UPDATE tasks SET status = 'pending', worker_id = NULL, started_at = NULL WHERE session_id = ? AND status = 'running'`,
+		sessionID,
+	)
+	return err
 }
