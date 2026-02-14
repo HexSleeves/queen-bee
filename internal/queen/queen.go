@@ -269,6 +269,13 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	// Context management
 	ctxMgr := compact.NewContext(200000) // ~200k tokens
 
+	// Initialize LLM client for Queen's own reasoning (review, replan)
+	var llmClient *llm.Client
+	if cfg.Queen.APIKey != "" || cfg.Queen.Provider == "anthropic" {
+		llmClient = llm.NewClient(cfg.Queen.APIKey, cfg.Queen.Model)
+		logger.Println("✓ Queen LLM enabled for review/replan")
+	}
+
 	q := &Queen{
 		cfg:         cfg,
 		bus:         msgBus,
@@ -280,6 +287,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 		router:      router,
 		registry:    registry,
 		ctx:         ctxMgr,
+		llm:         llmClient,
 		phase:       PhasePlan,
 		logger:      logger,
 		assignments: make(map[string]string),
@@ -670,6 +678,36 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 
 				q.logger.Printf("  ✅ Task %s completed by %s", taskID, workerID)
 
+				// LLM review: evaluate output quality if configured
+				if q.llm != nil && t != nil {
+					verdict, err := q.reviewWithLLM(ctx, taskID, t, result)
+					if err != nil {
+						q.logger.Printf("  ⚠ LLM review failed: %v (accepting result)", err)
+					} else if !verdict.Approved {
+						q.logger.Printf("  🔙 LLM rejected task %s: %s", taskID, verdict.Reason)
+						if len(verdict.Suggestions) > 0 {
+							for _, s := range verdict.Suggestions {
+								q.logger.Printf("     💡 %s", s)
+							}
+						}
+						// Re-queue with suggestions appended to description
+						if t.RetryCount < t.MaxRetries {
+							t.RetryCount++
+							t.Description += "\n\nPREVIOUS ATTEMPT REJECTED: " + verdict.Reason
+							if len(verdict.Suggestions) > 0 {
+								t.Description += "\nSuggestions: " + strings.Join(verdict.Suggestions, "; ")
+							}
+							q.tasks.UpdateStatus(taskID, task.StatusPending)
+							q.db.UpdateTaskStatus(q.sessionID, taskID, "pending")
+							q.logger.Printf("  🔄 Re-queued task %s (attempt %d/%d)", taskID, t.RetryCount, t.MaxRetries)
+							continue
+						}
+						q.logger.Printf("  💀 Task %s rejected but max retries reached, accepting", taskID)
+					} else {
+						q.logger.Printf("  ✓ LLM approved task %s", taskID)
+					}
+				}
+
 				// Show output immediately so user sees findings in real-time
 				if t != nil && result.Output != "" {
 					fmt.Printf("\n  ┌─ [%s] %s\n", t.Type, t.Title)
@@ -695,6 +733,24 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 
 	// Check if all tasks are done
 	if q.tasks.AllComplete() {
+		// LLM replan: check if more work is needed
+		if q.llm != nil {
+			newTasks, err := q.replanWithLLM(ctx)
+			if err != nil {
+				q.logger.Printf("  ⚠ LLM replan failed: %v (finishing)", err)
+			} else if len(newTasks) > 0 {
+				for _, t := range newTasks {
+					q.tasks.Add(t)
+					q.db.InsertTask(q.sessionID, state.TaskRow{
+						ID: t.ID, Type: string(t.Type), Status: string(t.Status),
+						Priority: int(t.Priority), Title: t.Title, Description: t.Description,
+						MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
+					})
+					q.logger.Printf("  📌 New task from replan: [%s] %s", t.Type, t.Title)
+				}
+				return false, nil // More work to do
+			}
+		}
 		return true, nil
 	}
 
