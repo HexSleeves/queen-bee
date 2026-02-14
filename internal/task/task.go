@@ -188,3 +188,81 @@ func (g *TaskGraph) Failed() []*Task {
 	}
 	return failed
 }
+
+// DetectCycles detects circular dependencies in the task graph using DFS.
+// Returns an error describing the cycle if found, or nil if no cycles exist.
+func (g *TaskGraph) DetectCycles() error {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	// Track visited nodes (fully processed)
+	visited := make(map[string]bool)
+	// Track nodes in current recursion stack (being processed)
+	recStack := make(map[string]bool)
+
+	for id := range g.tasks {
+		if !visited[id] {
+			if cycle := g.detectCycleDFS(id, visited, recStack, []string{}); cycle != nil {
+				return fmt.Errorf("circular dependency detected: %s", formatCycle(cycle))
+			}
+		}
+	}
+	return nil
+}
+
+// detectCycleDFS performs DFS from the given node to detect cycles.
+// Returns the cycle path if a cycle is detected, nil otherwise.
+func (g *TaskGraph) detectCycleDFS(nodeID string, visited, recStack map[string]bool, path []string) []string {
+	visited[nodeID] = true
+	recStack[nodeID] = true
+	path = append(path, nodeID)
+
+	task, ok := g.tasks[nodeID]
+	if !ok {
+		recStack[nodeID] = false
+		return nil
+	}
+
+	for _, depID := range task.DependsOn {
+		// Skip if dependency doesn't exist in the graph
+		if _, exists := g.tasks[depID]; !exists {
+			continue
+		}
+
+		if recStack[depID] {
+			// Cycle found - construct the cycle path
+			cycleStart := -1
+			for i, id := range path {
+				if id == depID {
+					cycleStart = i
+					break
+				}
+			}
+			if cycleStart >= 0 {
+				cycle := append(path[cycleStart:], depID)
+				return cycle
+			}
+		}
+
+		if !visited[depID] {
+			if cycle := g.detectCycleDFS(depID, visited, recStack, path); cycle != nil {
+				return cycle
+			}
+		}
+	}
+
+	recStack[nodeID] = false
+	return nil
+}
+
+// formatCycle formats a cycle path as a string like "a -> b -> c -> a"
+func formatCycle(cycle []string) string {
+	if len(cycle) == 0 {
+		return ""
+	}
+	result := cycle[0]
+	for i := 1; i < len(cycle); i++ {
+		result += " -> " + cycle[i]
+	}
+	return result
+}

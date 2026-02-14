@@ -9,8 +9,8 @@ import (
 func main() {
 	logger := log.New(os.Stderr, "", log.LstdFlags)
 
-	app := newApp()
-	if err := app.Run(context.Background(), os.Args); err != nil {
+	application := newApp()
+	if err := application.Run(context.Background(), os.Args); err != nil {
 		logger.Fatal(err)
 	}
 }

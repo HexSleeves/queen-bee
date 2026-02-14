@@ -1,11 +1,15 @@
 module github.com/exedev/queen-bee
 
-go 1.24.0
-
-require github.com/urfave/cli/v3 v3.6.2
+go 1.26.0
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.22.1 // indirect
+	github.com/urfave/cli/v3 v3.6.2
+	modernc.org/sqlite v1.45.0
+)
+
+require github.com/anthropics/anthropic-sdk-go v1.22.1
+
+require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -20,5 +24,4 @@ require (
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.45.0 // indirect
 )

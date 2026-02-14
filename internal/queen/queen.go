@@ -984,6 +984,16 @@ func (q *Queen) parsePlanOutput(output string) ([]*task.Task, error) {
 		tasks = append(tasks, t)
 	}
 
+	// Check for circular dependencies in the parsed tasks
+	// Create a temporary task graph to validate dependencies
+	tempGraph := task.NewTaskGraph(nil)
+	for _, t := range tasks {
+		tempGraph.Add(t)
+	}
+	if err := tempGraph.DetectCycles(); err != nil {
+		return nil, err
+	}
+
 	return tasks, nil
 }
 
