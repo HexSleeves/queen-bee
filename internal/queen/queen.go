@@ -57,7 +57,7 @@ type Queen struct {
 	logger    *log.Logger
 	lastErr   error
 
-	llm *llm.Client // LLM client for AI-backed review/replan
+	llm llm.Client // LLM client for AI-backed review/replan (nil = disabled)
 
 	// For tracking worker->task assignments
 	assignments  map[string]string // workerID -> taskID
@@ -270,10 +270,21 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	ctxMgr := compact.NewContext(200000) // ~200k tokens
 
 	// Initialize LLM client for Queen's own reasoning (review, replan)
-	var llmClient *llm.Client
-	if cfg.Queen.APIKey != "" || cfg.Queen.Provider == "anthropic" {
-		llmClient = llm.NewClient(cfg.Queen.APIKey, cfg.Queen.Model)
-		logger.Println("✓ Queen LLM enabled for review/replan")
+	var llmClient llm.Client
+	if cfg.Queen.Provider != "" {
+		var err error
+		llmClient, err = llm.NewFromConfig(llm.ProviderConfig{
+			Provider: cfg.Queen.Provider,
+			Model:    cfg.Queen.Model,
+			APIKey:   cfg.Queen.APIKey,
+			WorkDir:  cfg.ProjectDir,
+		})
+		if err != nil {
+			logger.Printf("⚠ Queen LLM init failed: %v (review/replan disabled)", err)
+			llmClient = nil
+		} else {
+			logger.Printf("✓ Queen LLM enabled (%s) for review/replan", cfg.Queen.Provider)
+		}
 	}
 
 	q := &Queen{

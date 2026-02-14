@@ -2,43 +2,86 @@ package llm
 
 import "testing"
 
-func TestNewClient(t *testing.T) {
-	c := NewClient("test-key", "")
+func TestAnthropicClient(t *testing.T) {
+	c := NewAnthropicClient("test-key", "")
 	if c == nil {
-		t.Fatal("NewClient returned nil")
+		t.Fatal("NewAnthropicClient returned nil")
 	}
 	if c.model != "claude-sonnet-4-20250514" {
 		t.Fatalf("expected default model, got %q", c.model)
 	}
 }
 
-func TestNewClientCustomModel(t *testing.T) {
-	c := NewClient("test-key", "claude-haiku-3-20240307")
+func TestAnthropicClientCustomModel(t *testing.T) {
+	c := NewAnthropicClient("test-key", "claude-haiku-3-20240307")
 	if c.model != "claude-haiku-3-20240307" {
 		t.Fatalf("expected custom model, got %q", c.model)
 	}
 }
 
-func TestMessage(t *testing.T) {
-	m := Message{Role: "user", Content: "hello"}
-	if m.Role != "user" || m.Content != "hello" {
-		t.Fatal("Message fields not set correctly")
+func TestCLIClient(t *testing.T) {
+	c := NewCLIClient("echo", []string{"-n"}, "", false)
+	if c == nil {
+		t.Fatal("NewCLIClient returned nil")
+	}
+	if c.command != "echo" {
+		t.Fatalf("expected echo, got %q", c.command)
 	}
 }
 
-func TestToSDKMessages(t *testing.T) {
-	msgs := []Message{
-		{Role: "user", Content: "hi"},
-		{Role: "assistant", Content: "hello"},
+func TestCLIClientPipe(t *testing.T) {
+	c := NewCLIClient("cat", nil, "", true)
+	if !c.pipe {
+		t.Fatal("expected pipe mode")
 	}
-	sdkMsgs := toSDKMessages(msgs)
-	if len(sdkMsgs) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(sdkMsgs))
+}
+
+func TestNewFromConfig_Anthropic(t *testing.T) {
+	c, err := NewFromConfig(ProviderConfig{Provider: "anthropic", APIKey: "sk-test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if sdkMsgs[0].Role != "user" {
-		t.Fatalf("expected user role, got %q", sdkMsgs[0].Role)
+	if c == nil {
+		t.Fatal("expected non-nil client")
 	}
-	if sdkMsgs[1].Role != "assistant" {
-		t.Fatalf("expected assistant role, got %q", sdkMsgs[1].Role)
+}
+
+func TestNewFromConfig_Kimi(t *testing.T) {
+	c, err := NewFromConfig(ProviderConfig{Provider: "kimi", WorkDir: "/tmp"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
+	if c == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+func TestNewFromConfig_Gemini(t *testing.T) {
+	c, err := NewFromConfig(ProviderConfig{Provider: "gemini"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+func TestNewFromConfig_Empty(t *testing.T) {
+	_, err := NewFromConfig(ProviderConfig{})
+	if err == nil {
+		t.Fatal("expected error for empty provider")
+	}
+}
+
+func TestNewFromConfig_Unknown(t *testing.T) {
+	_, err := NewFromConfig(ProviderConfig{Provider: "doesnotexist"})
+	if err == nil {
+		t.Fatal("expected error for unknown provider")
+	}
+}
+
+func TestInterfaceCompliance(t *testing.T) {
+	// Verify both implementations satisfy the Client interface
+	var _ Client = (*AnthropicClient)(nil)
+	var _ Client = (*CLIClient)(nil)
 }
