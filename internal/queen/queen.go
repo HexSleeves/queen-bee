@@ -403,8 +403,11 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 			}
 			if done {
 				q.phase = PhaseDone
+			} else if len(q.tasks.Ready()) > 0 {
+				// Tasks are already unblocked — skip planning, go straight to delegation
+				q.phase = PhaseDelegate
 			} else {
-				q.phase = PhasePlan // Loop back for more work
+				q.phase = PhasePlan // Need LLM to create more tasks
 			}
 			q.savePhase()
 
@@ -865,7 +868,9 @@ func (q *Queen) buildPlanPrompt() string {
 	b.WriteString("- Each task should include a \"constraints\" field listing what it must NOT do\n")
 	b.WriteString("- Each task should include an \"allowed_paths\" field listing which files/dirs it may touch\n")
 	b.WriteString("- Prefer more small focused tasks over fewer broad tasks\n")
-	b.WriteString("- DO NOT combine unrelated changes into one task\n\n")
+	b.WriteString("- DO NOT combine unrelated changes into one task\n")
+	b.WriteString(fmt.Sprintf("- MAXIMIZE PARALLELISM: we have %d workers. Only add depends_on when a task truly cannot start without another's output. Independent tasks MUST have empty depends_on so they run in parallel.\n", q.cfg.Workers.MaxParallel))
+	b.WriteString("- DO NOT create linear chains of dependencies unless strictly necessary — if tasks touch different files, they are independent\n\n")
 
 	b.WriteString("Output a JSON array of tasks. Each task should have:\n")
 	b.WriteString(`- "id": unique string identifier` + "\n")
