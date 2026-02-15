@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/exedev/queen-bee/internal/task"
+	"github.com/exedev/waggle/internal/task"
 )
 
 const replanSystemPrompt = `You are a re-planning agent in a multi-agent orchestration system.

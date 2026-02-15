@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/exedev/queen-bee/internal/task"
+	"github.com/exedev/waggle/internal/task"
 )
 
 // ReviewVerdict is the LLM's assessment of a completed task.

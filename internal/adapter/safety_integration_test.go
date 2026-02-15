@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/config"
-	"github.com/exedev/queen-bee/internal/safety"
-	"github.com/exedev/queen-bee/internal/task"
+	"github.com/exedev/waggle/internal/config"
+	"github.com/exedev/waggle/internal/safety"
+	"github.com/exedev/waggle/internal/task"
 )
 
 // TestSafetyGuardBlocksDangerousCommands tests that blocked commands are rejected

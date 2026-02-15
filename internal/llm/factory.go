@@ -29,7 +29,7 @@ func NewFromConfig(cfg ProviderConfig) (Client, error) {
 		return NewCLIClient("opencode", []string{"run"}, cfg.WorkDir, false), nil
 
 	case "":
-		return nil, fmt.Errorf("no LLM provider configured (set queen.provider in queen.json)")
+		return nil, fmt.Errorf("no LLM provider configured (set queen.provider in waggle.json)")
 
 	default:
 		return nil, fmt.Errorf("unknown LLM provider: %q", cfg.Provider)

@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="50%" style="stop-color:#16213e"/>
+      <stop offset="100%" style="stop-color:#1a1a2e"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700"/>
+      <stop offset="100%" style="stop-color:#FFA500"/>
+    </linearGradient>
+    <linearGradient id="dkgold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#B8860B"/>
+      <stop offset="100%" style="stop-color:#8B6914"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  
+  <!-- Honeycomb pattern left -->
+  <g opacity="0.05" fill="#FFD700">
+    <polygon points="50,50 75,35 100,50 100,80 75,95 50,80"/>
+    <polygon points="100,50 125,35 150,50 150,80 125,95 100,80"/>
+    <polygon points="75,90 100,75 125,90 125,120 100,135 75,120"/>
+    <polygon points="25,90 50,75 75,90 75,120 50,135 25,120"/>
+    <polygon points="50,130 75,115 100,130 100,160 75,175 50,160"/>
+    <polygon points="100,130 125,115 150,130 150,160 125,175 100,160"/>
+    <polygon points="75,170 100,155 125,170 125,200 100,215 75,200"/>
+    <polygon points="25,170 50,155 75,170 75,200 50,215 25,200"/>
+    <polygon points="50,210 75,195 100,210 100,240 75,255 50,240"/>
+    <polygon points="100,210 125,195 150,210 150,240 125,255 100,240"/>
+  </g>
+  
+  <!-- Honeycomb pattern right -->
+  <g opacity="0.05" fill="#FFD700">
+    <polygon points="1050,50 1075,35 1100,50 1100,80 1075,95 1050,80"/>
+    <polygon points="1100,50 1125,35 1150,50 1150,80 1125,95 1100,80"/>
+    <polygon points="1075,90 1100,75 1125,90 1125,120 1100,135 1075,120"/>
+    <polygon points="1125,90 1150,75 1175,90 1175,120 1150,135 1125,120"/>
+    <polygon points="1050,130 1075,115 1100,130 1100,160 1075,175 1050,160"/>
+    <polygon points="1100,130 1125,115 1150,130 1150,160 1125,175 1100,160"/>
+    <polygon points="1075,170 1100,155 1125,170 1125,200 1100,215 1075,200"/>
+    <polygon points="1125,170 1150,155 1175,170 1175,200 1150,215 1125,200"/>
+    <polygon points="1050,210 1075,195 1100,210 1100,240 1075,255 1050,240"/>
+    <polygon points="1100,210 1125,195 1150,210 1150,240 1125,255 1100,240"/>
+  </g>
+  
+  <!-- Bee icon -->
+  <g transform="translate(280,150)">
+    <!-- Wings -->
+    <ellipse cx="-32" cy="-22" rx="25" ry="14" fill="#FFD700" opacity="0.2" transform="rotate(-20,-32,-22)"/>
+    <ellipse cx="32" cy="-22" rx="25" ry="14" fill="#FFD700" opacity="0.2" transform="rotate(20,32,-22)"/>
+    <!-- Body -->
+    <ellipse cx="0" cy="0" rx="20" ry="30" fill="url(#gold)"/>
+    <!-- Stripes -->
+    <rect x="-20" y="-6" width="40" height="6" rx="3" fill="url(#dkgold)" opacity="0.7"/>
+    <rect x="-18" y="6" width="36" height="6" rx="3" fill="url(#dkgold)" opacity="0.7"/>
+    <rect x="-13" y="17" width="26" height="5" rx="2" fill="url(#dkgold)" opacity="0.7"/>
+    <!-- Head -->
+    <circle cx="0" cy="-35" r="13" fill="url(#dkgold)"/>
+    <circle cx="-5" cy="-38" r="3" fill="#FFD700"/>
+    <circle cx="5" cy="-38" r="3" fill="#FFD700"/>
+    <!-- Antennae -->
+    <path d="M-4,-47 Q-10,-62 -18,-58" stroke="#FFD700" stroke-width="1.5" fill="none"/>
+    <circle cx="-18" cy="-58" r="2" fill="#FFD700"/>
+    <path d="M4,-47 Q10,-62 18,-58" stroke="#FFD700" stroke-width="1.5" fill="none"/>
+    <circle cx="18" cy="-58" r="2" fill="#FFD700"/>
+    <!-- Crown -->
+    <polygon points="0,-55 -10,-45 -7,-45 -5,-52 0,-45 5,-52 7,-45 10,-45" fill="#FFD700" opacity="0.8"/>
+  </g>
+  
+  <!-- Waggle dance trail -->
+  <g transform="translate(280,150)" fill="none" stroke="#FFD700" stroke-width="1.5" opacity="0.2">
+    <path d="M-60,42 Q-60,70 -30,70 Q0,70 0,42 Q0,14 30,14 Q60,14 60,42 Q60,70 30,70 Q0,70 0,42" stroke-dasharray="4,3"/>
+  </g>
+  
+  <!-- Title -->
+  <text x="600" y="130" text-anchor="middle" 
+        font-family="'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif" 
+        font-size="80" font-weight="800" letter-spacing="8" fill="url(#gold)">
+    WAGGLE
+  </text>
+  
+  <!-- Tagline -->
+  <text x="600" y="175" text-anchor="middle" 
+        font-family="'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif" 
+        font-size="18" font-weight="400" letter-spacing="6" fill="#FFD700" opacity="0.5">
+    MULTI-AGENT ORCHESTRATION
+  </text>
+  
+  <!-- Dance description -->
+  <text x="600" y="220" text-anchor="middle" 
+        font-family="'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif" 
+        font-size="14" font-weight="300" letter-spacing="1" fill="#FFD700" opacity="0.35">
+    Plan → Delegate → Monitor → Review → Replan
+  </text>
+  
+  <!-- Decorative line -->
+  <line x1="420" y1="245" x2="780" y2="245" stroke="#FFD700" stroke-width="1" opacity="0.15"/>
+  
+  <!-- Version / meta -->
+  <text x="600" y="270" text-anchor="middle"
+        font-family="'SF Mono', 'Fira Code', monospace" 
+        font-size="12" font-weight="400" letter-spacing="2" fill="#FFD700" opacity="0.25">
+    THE WAGGLE DANCE FOR AI AGENTS
+  </text>
+</svg>

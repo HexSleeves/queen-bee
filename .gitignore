@@ -1,11 +1,11 @@
 # Binary
-/queen-bee
+/waggle
 
 # Hive state (per-project)
 .hive/
 
 # Config with secrets
-queen.json
+waggle.json
 
 # Go
 *.exe

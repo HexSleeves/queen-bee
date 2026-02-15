@@ -3,8 +3,8 @@ package adapter
 import (
 	"fmt"
 
-	"github.com/exedev/queen-bee/internal/task"
-	"github.com/exedev/queen-bee/internal/worker"
+	"github.com/exedev/waggle/internal/task"
+	"github.com/exedev/waggle/internal/worker"
 )
 
 // Adapter wraps a CLI tool to provide a standard worker interface

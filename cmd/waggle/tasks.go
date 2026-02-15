@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/config"
-	"github.com/exedev/queen-bee/internal/task"
+	"github.com/exedev/waggle/internal/config"
+	"github.com/exedev/waggle/internal/task"
 )
 
 func loadTasksFile(path string, cfg *config.Config) ([]*task.Task, error) {

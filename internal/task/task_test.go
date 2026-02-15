@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exedev/queen-bee/internal/bus"
+	"github.com/exedev/waggle/internal/bus"
 )
 
 func TestDetectCycles_NoCycleLinearChain(t *testing.T) {

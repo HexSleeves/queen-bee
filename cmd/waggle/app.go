@@ -11,17 +11,17 @@ const version = "0.1.0"
 // newApp creates the CLI application with all flags and commands.
 func newApp() *cli.Command {
 	return &cli.Command{
-		Name:        "queen-bee",
+		Name:        "waggle",
 		Usage:       "Agent Orchestration System",
 		Version:     version,
-		UsageText:   "queen-bee [global options] command [command options] [arguments...]",
-		Description: "Queen Bee orchestrates AI agents to accomplish complex objectives",
+		UsageText:   "waggle [global options] command [command options] [arguments...]",
+		Description: "Waggle orchestrates AI agents to accomplish complex objectives",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "config",
 				Aliases: []string{"c"},
 				Usage:   "Path to config file",
-				Value:   "queen.json",
+				Value:   "waggle.json",
 			},
 			&cli.StringFlag{
 				Name:    "project",

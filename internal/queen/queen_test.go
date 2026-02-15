@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/config"
-	"github.com/exedev/queen-bee/internal/state"
+	"github.com/exedev/waggle/internal/config"
+	"github.com/exedev/waggle/internal/state"
 )
 
 // TestCloseDoesNotOverwriteDoneStatus verifies that Close() does not overwrite

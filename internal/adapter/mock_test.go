@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/task"
+	"github.com/exedev/waggle/internal/task"
 )
 
 // TestMockClaudeAPI tests mocked Claude API interactions

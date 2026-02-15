@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/config"
-	"github.com/exedev/queen-bee/internal/state"
-	"github.com/exedev/queen-bee/internal/task"
+	"github.com/exedev/waggle/internal/config"
+	"github.com/exedev/waggle/internal/state"
+	"github.com/exedev/waggle/internal/task"
 )
 
 // TestResumeContinuesInterruptedSession simulates an interruption mid-execution

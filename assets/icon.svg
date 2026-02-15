@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700"/>
+      <stop offset="100%" style="stop-color:#FFA500"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#B8860B"/>
+      <stop offset="100%" style="stop-color:#8B6914"/>
+    </linearGradient>
+  </defs>
+  
+  <rect width="128" height="128" rx="28" fill="#1a1a2e"/>
+  
+  <!-- Hex outline -->
+  <polygon points="64,22 98,42 98,82 64,102 30,82 30,42" 
+           fill="none" stroke="#FFD700" stroke-width="1.5" opacity="0.15"/>
+  
+  <g transform="translate(64,58)">
+    <!-- Wings -->
+    <ellipse cx="-18" cy="-12" rx="13" ry="7" fill="#FFD700" opacity="0.2" transform="rotate(-20,-18,-12)"/>
+    <ellipse cx="18" cy="-12" rx="13" ry="7" fill="#FFD700" opacity="0.2" transform="rotate(20,18,-12)"/>
+    <!-- Body -->
+    <ellipse cx="0" cy="0" rx="11" ry="17" fill="url(#g1)"/>
+    <!-- Stripes -->
+    <rect x="-11" y="-3" width="22" height="4" rx="2" fill="url(#g2)" opacity="0.7"/>
+    <rect x="-10" y="4" width="20" height="4" rx="2" fill="url(#g2)" opacity="0.7"/>
+    <rect x="-7" y="10" width="14" height="3" rx="1.5" fill="url(#g2)" opacity="0.7"/>
+    <!-- Head -->
+    <circle cx="0" cy="-21" r="7" fill="url(#g2)"/>
+    <circle cx="-3" cy="-23" r="1.5" fill="#FFD700"/>
+    <circle cx="3" cy="-23" r="1.5" fill="#FFD700"/>
+    <!-- Antennae -->
+    <path d="M-2,-27 Q-6,-35 -10,-33" stroke="#FFD700" stroke-width="1" fill="none"/>
+    <circle cx="-10" cy="-33" r="1.5" fill="#FFD700"/>
+    <path d="M2,-27 Q6,-35 10,-33" stroke="#FFD700" stroke-width="1" fill="none"/>
+    <circle cx="10" cy="-33" r="1.5" fill="#FFD700"/>
+    <!-- Crown -->
+    <polygon points="0,-32 -6,-26 -4,-26 -3,-30 0,-26 3,-30 4,-26 6,-26" fill="#FFD700" opacity="0.85"/>
+  </g>
+  
+  <!-- Waggle trail -->
+  <g transform="translate(64,58)" fill="none" stroke="#FFD700" stroke-width="1" opacity="0.2">
+    <path d="M-25,24 Q-25,38 -12,38 Q0,38 0,24 Q0,10 12,10 Q25,10 25,24" stroke-dasharray="3,2"/>
+  </g>
+</svg>

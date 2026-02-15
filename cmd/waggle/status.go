@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/exedev/queen-bee/internal/state"
+	"github.com/exedev/waggle/internal/state"
 	"github.com/urfave/cli/v3"
 )
 
@@ -18,7 +18,7 @@ func cmdStatus(ctx context.Context, cmd *cli.Command) error {
 	hiveDir := filepath.Join(projectDir, ".hive")
 
 	if _, err := os.Stat(hiveDir); os.IsNotExist(err) {
-		logger.Println("No active hive session. Run 'queen-bee init' first.")
+		logger.Println("No active hive session. Run 'waggle init' first.")
 		return nil
 	}
 
@@ -69,7 +69,7 @@ func cmdStatusDB(hiveDir string) error {
 
 	fmt.Println("")
 	fmt.Println("══════════════════════════════════════════════════")
-	fmt.Println("  Queen Bee — Session Status")
+	fmt.Println("  Waggle — Session Status")
 	fmt.Println("══════════════════════════════════════════════════")
 	fmt.Printf("  Session:    %s\n", session.ID)
 	fmt.Printf("  Objective:  %s\n", session.Objective)

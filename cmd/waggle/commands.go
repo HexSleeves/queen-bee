@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/exedev/queen-bee/internal/config"
-	"github.com/exedev/queen-bee/internal/queen"
-	"github.com/exedev/queen-bee/internal/state"
+	"github.com/exedev/waggle/internal/config"
+	"github.com/exedev/waggle/internal/queen"
+	"github.com/exedev/waggle/internal/state"
 	"github.com/urfave/cli/v3"
 )
 
@@ -86,7 +86,7 @@ func cmdConfig(ctx context.Context, cmd *cli.Command) error {
 func cmdRun(ctx context.Context, cmd *cli.Command) error {
 	args := cmd.Args().Slice()
 	if len(args) == 0 {
-		return fmt.Errorf("usage: queen-bee run <objective>")
+		return fmt.Errorf("usage: waggle run <objective>")
 	}
 
 	objective := args[0]
@@ -106,7 +106,7 @@ func runObjective(ctx context.Context, cmd *cli.Command, objective string) error
 
 	fmt.Println("")
 	fmt.Println("══════════════════════════════════════════════════")
-	fmt.Println("  Queen Bee - Agent Orchestration System")
+	fmt.Println("  Waggle - Agent Orchestration System")
 	fmt.Println("══════════════════════════════════════════════════")
 	fmt.Printf("  Objective: %s\n", objective)
 	fmt.Printf("  Adapter:   %s\n", cfg.Workers.DefaultAdapter)
@@ -164,7 +164,7 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 
 	// Check if hive and database exist
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		return fmt.Errorf("no session to resume. Run 'queen-bee run <objective>' first")
+		return fmt.Errorf("no session to resume. Run 'waggle run <objective>' first")
 	}
 
 	// Open the database and find the latest resumable session
@@ -176,7 +176,7 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 
 	session, err := db.FindResumableSession(ctx)
 	if err != nil {
-		return fmt.Errorf("no interrupted session found to resume. Run 'queen-bee run <objective>' to start a new session")
+		return fmt.Errorf("no interrupted session found to resume. Run 'waggle run <objective>' to start a new session")
 	}
 
 	logger.Printf("Resuming session: %s", session.ID)
@@ -189,7 +189,7 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 
 	fmt.Println("")
 	fmt.Println("══════════════════════════════════════════════════")
-	fmt.Println("  Queen Bee - Agent Orchestration System")
+	fmt.Println("  Waggle - Agent Orchestration System")
 	fmt.Println("  Resuming Interrupted Session")
 	fmt.Println("══════════════════════════════════════════════════")
 	fmt.Printf("  Session ID: %s\n", session.ID)

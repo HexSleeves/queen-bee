@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/exedev/queen-bee/internal/config"
+	"github.com/exedev/waggle/internal/config"
 )
 
 // Guard enforces safety constraints on worker operations

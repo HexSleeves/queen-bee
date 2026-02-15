@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/bus"
+	"github.com/exedev/waggle/internal/bus"
 )
 
 type Status string

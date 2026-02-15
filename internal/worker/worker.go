@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/bus"
-	"github.com/exedev/queen-bee/internal/task"
+	"github.com/exedev/waggle/internal/bus"
+	"github.com/exedev/waggle/internal/task"
 )
 
 // Status represents the current state of a worker

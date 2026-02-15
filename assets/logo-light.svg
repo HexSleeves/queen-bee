@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="honeyGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#D4920A"/>
+      <stop offset="100%" style="stop-color:#B87A00"/>
+    </linearGradient>
+    <linearGradient id="darkHoney" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B6914"/>
+      <stop offset="100%" style="stop-color:#6B4F10"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#FEFAF0"/>
+  
+  <!-- Honeycomb pattern (subtle background) -->
+  <g opacity="0.06" fill="#D4920A">
+    <polygon points="130,80 155,65 180,80 180,110 155,125 130,110"/>
+    <polygon points="180,80 205,65 230,80 230,110 205,125 180,110"/>
+    <polygon points="280,80 305,65 330,80 330,110 305,125 280,110"/>
+    <polygon points="330,80 355,65 380,80 380,110 355,125 330,110"/>
+    <polygon points="105,120 130,105 155,120 155,150 130,165 105,150"/>
+    <polygon points="355,120 380,105 405,120 405,150 380,165 355,150"/>
+    <polygon points="80,370 105,355 130,370 130,400 105,415 80,400"/>
+    <polygon points="380,370 405,355 430,370 430,400 405,415 380,400"/>
+    <polygon points="130,410 155,395 180,410 180,440 155,455 130,440"/>
+    <polygon points="330,410 355,395 380,410 380,440 355,455 330,440"/>
+  </g>
+  
+  <!-- Central hexagon -->
+  <polygon points="256,120 340,168 340,264 256,312 172,264 172,168" 
+           fill="none" stroke="url(#honeyGold)" stroke-width="3" opacity="0.2"/>
+  
+  <!-- Bee body -->
+  <g transform="translate(256,200)">
+    <!-- Wings -->
+    <ellipse cx="-45" cy="-30" rx="35" ry="20" fill="#D4920A" opacity="0.15" 
+             transform="rotate(-20,-45,-30)"/>
+    <ellipse cx="45" cy="-30" rx="35" ry="20" fill="#D4920A" opacity="0.15" 
+             transform="rotate(20,45,-30)"/>
+    
+    <!-- Body -->
+    <ellipse cx="0" cy="0" rx="28" ry="42" fill="url(#honeyGold)"/>
+    
+    <!-- Stripes -->
+    <rect x="-28" y="-8" width="56" height="8" rx="4" fill="url(#darkHoney)" opacity="0.7"/>
+    <rect x="-25" y="8" width="50" height="8" rx="4" fill="url(#darkHoney)" opacity="0.7"/>
+    <rect x="-18" y="24" width="36" height="7" rx="3" fill="url(#darkHoney)" opacity="0.7"/>
+    
+    <!-- Head -->
+    <circle cx="0" cy="-48" r="18" fill="url(#darkHoney)"/>
+    
+    <!-- Eyes -->
+    <circle cx="-7" cy="-52" r="4" fill="#D4920A"/>
+    <circle cx="7" cy="-52" r="4" fill="#D4920A"/>
+    
+    <!-- Antennae -->
+    <path d="M-5,-65 Q-15,-85 -25,-80" stroke="#D4920A" stroke-width="2" fill="none"/>
+    <circle cx="-25" cy="-80" r="3" fill="#D4920A"/>
+    <path d="M5,-65 Q15,-85 25,-80" stroke="#D4920A" stroke-width="2" fill="none"/>
+    <circle cx="25" cy="-80" r="3" fill="#D4920A"/>
+    
+    <!-- Crown -->
+    <g transform="translate(0,-72)">
+      <polygon points="0,-18 -14,-5 -10,-5 -7,-14 0,-5 7,-14 10,-5 14,-5" 
+               fill="#D4920A" opacity="0.9"/>
+    </g>
+  </g>
+  
+  <!-- Waggle dance path (figure-8) -->
+  <g transform="translate(256,200)" fill="none" stroke="#D4920A" stroke-width="2" opacity="0.3">
+    <path d="M-80,60 Q-80,100 -40,100 Q0,100 0,60 Q0,20 40,20 Q80,20 80,60 Q80,100 40,100 Q0,100 0,60 Q0,20 -40,20 Q-80,20 -80,60" stroke-dasharray="6,4"/>
+  </g>
+  
+  <!-- Motion dots -->
+  <g fill="#D4920A" opacity="0.4">
+    <circle cx="176" cy="260" r="3"/>
+    <circle cx="195" cy="290" r="2.5"/>
+    <circle cx="220" cy="298" r="2"/>
+    <circle cx="292" cy="298" r="2"/>
+    <circle cx="317" cy="290" r="2.5"/>
+    <circle cx="336" cy="260" r="3"/>
+  </g>
+  
+  <!-- Text: WAGGLE -->
+  <text x="256" y="400" text-anchor="middle" 
+        font-family="'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif" 
+        font-size="64" font-weight="800" letter-spacing="6" fill="url(#honeyGold)">
+    WAGGLE
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="256" y="435" text-anchor="middle" 
+        font-family="'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif" 
+        font-size="14" font-weight="400" letter-spacing="4" fill="#8B6914" opacity="0.5">
+    AGENT ORCHESTRATION
+  </text>
+</svg>

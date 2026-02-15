@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exedev/queen-bee/internal/blackboard"
-	"github.com/exedev/queen-bee/internal/bus"
-	"github.com/exedev/queen-bee/internal/task"
+	"github.com/exedev/waggle/internal/blackboard"
+	"github.com/exedev/waggle/internal/bus"
+	"github.com/exedev/waggle/internal/task"
 )
 
 func newTestQueenForReplan(objective string) *Queen {

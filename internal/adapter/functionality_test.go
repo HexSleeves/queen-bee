@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/task"
-	"github.com/exedev/queen-bee/internal/worker"
+	"github.com/exedev/waggle/internal/task"
+	"github.com/exedev/waggle/internal/worker"
 )
 
 // TestClaudeAdapterFunctionality tests Claude-specific functionality

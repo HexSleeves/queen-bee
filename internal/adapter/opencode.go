@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/exedev/queen-bee/internal/errors"
-	"github.com/exedev/queen-bee/internal/safety"
-	"github.com/exedev/queen-bee/internal/task"
-	"github.com/exedev/queen-bee/internal/worker"
+	"github.com/exedev/waggle/internal/errors"
+	"github.com/exedev/waggle/internal/safety"
+	"github.com/exedev/waggle/internal/task"
+	"github.com/exedev/waggle/internal/worker"
 )
 
 // OpenCodeAdapter wraps the `opencode` CLI

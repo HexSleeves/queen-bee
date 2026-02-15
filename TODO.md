@@ -1,4 +1,4 @@
-# Queen Bee — TODO
+# Waggle — TODO
 
 > Prioritized next steps. Updated 2026-02-14.
 
@@ -56,9 +56,9 @@
 
 - [ ] **Publish binary releases** — GoReleaser or GH Actions workflow for linux/mac/arm64 binaries.
 
-- [ ] **Add `queen-bee logs` command** — Stream or tail event log for a session from SQLite.
+- [ ] **Add `waggle logs` command** — Stream or tail event log for a session from SQLite.
 
-- [ ] **Add `queen-bee sessions` command** — List all past sessions with objective, status, task counts.
+- [ ] **Add `waggle sessions` command** — List all past sessions with objective, status, task counts.
 
 - [ ] **LLM-backed context summarizer** — Replace `compact.DefaultSummarizer` (extractive) with one that calls the Queen's LLM.
 

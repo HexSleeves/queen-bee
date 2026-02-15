@@ -1,4 +1,4 @@
-# Queen Bee — Project Context
+# Waggle — Project Context
 
 > Last updated: 2026-02-14
 
@@ -37,7 +37,7 @@ User Objective
 
 | Package | File(s) | Lines | Purpose |
 |---------|---------|-------|---------|
-| `cmd/queen-bee` | `main.go`, `app.go`, `commands.go`, `status.go`, `tasks.go` | ~530 | CLI entry point (urfave/cli): `run`, `init`, `status`, `config`, `resume` |
+| `cmd/waggle` | `main.go`, `app.go`, `commands.go`, `status.go`, `tasks.go` | ~530 | CLI entry point (urfave/cli): `run`, `init`, `status`, `config`, `resume` |
 | `internal/queen` | `queen.go` | ~1260 | **Core orchestrator** — Plan/Delegate/Monitor/Review/Replan loop |
 | `internal/queen` | `review.go` | ~205 | LLM-backed review: evaluates worker output quality |
 | `internal/queen` | `replan.go` | ~140 | LLM-backed replan: identifies follow-up tasks |
@@ -112,7 +112,7 @@ After all tasks complete, the Queen's LLM reviews the full picture:
 Returns new tasks to add (or empty array → done).
 
 ### Provider Selection
-Configured via `queen.json`:
+Configured via `waggle.json`:
 ```json
 {"queen": {"provider": "kimi"}}        // uses kimi CLI (free, no API key)
 {"queen": {"provider": "gemini"}}       // uses gemini CLI
@@ -154,7 +154,7 @@ The task system now includes **cycle detection** via DFS. When `parsePlanOutput(
 
 ## Data Flow
 
-1. **User** runs `queen-bee --adapter kimi run "Review this codebase"`
+1. **User** runs `waggle --adapter kimi run "Review this codebase"`
 2. **Queen.plan()** — Spawns one worker to decompose objective into JSON task array (with constraints + allowed_paths per task)
 3. **Queen.delegate()** — Assigns ready tasks (respecting deps, cycle-free) to workers up to `MaxParallel`, injects default scope constraints
 4. **Queen.monitor()** — Polls workers every 2s, logs every 10s, enforces timeout
@@ -172,7 +172,7 @@ The task system now includes **cycle detection** via DFS. When `parsePlanOutput(
 ```
 
 ### SQLite Schema
-- **sessions** — one row per `queen-bee run` invocation (id, objective, status, phase, iteration, timestamps)
+- **sessions** — one row per `waggle run` invocation (id, objective, status, phase, iteration, timestamps)
 - **events** — append-only event log indexed by session + type
 - **tasks** — full task state (status, worker_id, result JSON, result_data, retries, deps)
 - **blackboard** — persisted shared memory (key/value per session)
@@ -181,17 +181,17 @@ The task system now includes **cycle detection** via DFS. When `parsePlanOutput(
 ## CLI Commands
 
 ```bash
-queen-bee init                          # Create .hive/ and queen.json
-queen-bee run "<objective>"              # Run with AI planning
-queen-bee --adapter kimi run "<obj>"     # Specify adapter
-queen-bee --adapter exec --tasks f.json run "<obj>"  # Pre-defined tasks
-queen-bee --workers 8 run "<obj>"        # Set parallelism
-queen-bee status                         # Show current/last session
-queen-bee config                         # Show configuration
-queen-bee resume                         # Resume interrupted session
+waggle init                          # Create .hive/ and waggle.json
+waggle run "<objective>"              # Run with AI planning
+waggle --adapter kimi run "<obj>"     # Specify adapter
+waggle --adapter exec --tasks f.json run "<obj>"  # Pre-defined tasks
+waggle --workers 8 run "<obj>"        # Set parallelism
+waggle status                         # Show current/last session
+waggle config                         # Show configuration
+waggle resume                         # Resume interrupted session
 ```
 
-## Configuration (`queen.json`)
+## Configuration (`waggle.json`)
 
 ```json
 {
@@ -263,6 +263,6 @@ queen-bee resume                         # Resume interrupted session
 
 ## Repository
 
-- GitHub: https://github.com/HexSleeves/queen-bee
+- GitHub: https://github.com/HexSleeves/waggle
 - 17 commits on `main`
 - No branches, no CI, no releases

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/bus"
+	"github.com/exedev/waggle/internal/bus"
 )
 
 // Entry is a single item posted to the blackboard

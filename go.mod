@@ -1,4 +1,4 @@
-module github.com/exedev/queen-bee
+module github.com/exedev/waggle
 
 go 1.26.0
 

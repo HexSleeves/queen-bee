@@ -10,17 +10,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/exedev/queen-bee/internal/adapter"
-	"github.com/exedev/queen-bee/internal/blackboard"
-	"github.com/exedev/queen-bee/internal/bus"
-	"github.com/exedev/queen-bee/internal/compact"
-	"github.com/exedev/queen-bee/internal/config"
-	"github.com/exedev/queen-bee/internal/errors"
-	"github.com/exedev/queen-bee/internal/llm"
-	"github.com/exedev/queen-bee/internal/safety"
-	"github.com/exedev/queen-bee/internal/state"
-	"github.com/exedev/queen-bee/internal/task"
-	"github.com/exedev/queen-bee/internal/worker"
+	"github.com/exedev/waggle/internal/adapter"
+	"github.com/exedev/waggle/internal/blackboard"
+	"github.com/exedev/waggle/internal/bus"
+	"github.com/exedev/waggle/internal/compact"
+	"github.com/exedev/waggle/internal/config"
+	"github.com/exedev/waggle/internal/errors"
+	"github.com/exedev/waggle/internal/llm"
+	"github.com/exedev/waggle/internal/safety"
+	"github.com/exedev/waggle/internal/state"
+	"github.com/exedev/waggle/internal/task"
+	"github.com/exedev/waggle/internal/worker"
 )
 
 // Phase represents the current phase of the Queen's loop
@@ -309,7 +309,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 // Run executes the Queen's main loop: Plan -> Delegate -> Monitor -> Review
 func (q *Queen) Run(ctx context.Context, objective string) error {
 	q.objective = objective
-	q.logger.Printf("🐝 Queen Bee starting | Objective: %s", objective)
+	q.logger.Printf("🐝 Waggle starting | Objective: %s", objective)
 
 	// Preflight: verify the default adapter is available
 	available := q.registry.Available()
