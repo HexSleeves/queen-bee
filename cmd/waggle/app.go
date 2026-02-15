@@ -17,6 +17,10 @@ func newApp() *cli.Command {
 		UsageText:   "waggle [global options] command [command options] [arguments...]",
 		Description: "Waggle orchestrates AI agents to accomplish complex objectives",
 		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "legacy",
+				Usage: "Force legacy orchestration loop (no agent mode)",
+			},
 			&cli.StringFlag{
 				Name:    "config",
 				Aliases: []string{"c"},

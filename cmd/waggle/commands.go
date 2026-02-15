@@ -142,8 +142,22 @@ func runObjective(ctx context.Context, cmd *cli.Command, objective string) error
 		cancel()
 	}()
 
-	if err := q.Run(runCtx, objective); err != nil {
-		return fmt.Errorf("queen failed: %w", err)
+	// Use agent mode (tool-using LLM) unless --legacy or no tool support
+	forceLegacy := cmd.Bool("legacy")
+	var runErr error
+	if !forceLegacy && q.SupportsAgentMode() {
+		logger.Println("✓ Agent mode: Queen will use tools autonomously")
+		runErr = q.RunAgent(runCtx, objective)
+	} else {
+		if forceLegacy {
+			logger.Println("⚙ Legacy mode (--legacy flag)")
+		} else {
+			logger.Println("⚙ Legacy mode (LLM provider does not support tools)")
+		}
+		runErr = q.Run(runCtx, objective)
+	}
+	if runErr != nil {
+		return fmt.Errorf("queen failed: %w", runErr)
 	}
 
 	fmt.Println("")
@@ -224,9 +238,17 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 		cancel()
 	}()
 
-	// Run with the resumed session
-	if err := q.Run(runCtx, objective); err != nil {
-		return fmt.Errorf("queen failed: %w", err)
+	// Run with the resumed session, preferring agent mode
+	forceLegacy := cmd.Bool("legacy")
+	var runErr error
+	if !forceLegacy && q.SupportsAgentMode() {
+		logger.Println("✓ Agent mode: resuming with tool-using Queen")
+		runErr = q.RunAgentResume(runCtx, session.ID)
+	} else {
+		runErr = q.Run(runCtx, objective)
+	}
+	if runErr != nil {
+		return fmt.Errorf("queen failed: %w", runErr)
 	}
 
 	fmt.Println("")
