@@ -10,14 +10,19 @@
 
 ## What is Waggle?
 
-Waggle is a multi-agent orchestration framework written in Go. A central **Queen** agent decomposes complex objectives into a graph of tasks, delegates them to **Worker Bee** sub-agents — AI coding CLIs like Claude Code, Kimi, Gemini, or plain shell commands — monitors execution in parallel, reviews results with LLM judgment, and replans when needed. The entire lifecycle is modeled after the [waggle dance](https://en.wikipedia.org/wiki/Waggle_dance), the figure-eight dance honeybees use to communicate exactly where resources are and how to get them.
+Waggle is a multi-agent orchestration framework written in Go. A central **Queen** agent decomposes
+complex objectives into a graph of tasks, delegates them to **Worker Bee** sub-agents — AI coding CLIs
+like Claude Code, Kimi, Gemini, or plain shell commands — monitors execution in parallel, reviews
+results with LLM judgment, and replans when needed. The entire lifecycle is modeled after the
+[waggle dance](https://en.wikipedia.org/wiki/Waggle_dance), the figure-eight dance honeybees use to
+communicate exactly where resources are and how to get them.
 
 ## How it Works
 
 The waggle dance has a direct mapping to Waggle's orchestration loop:
 
 | Dance Phase | Waggle Phase | What Happens |
-|---|---|---|
+| ------- | ---------- | ----------- |
 | 👑 Scout signals direction | **Plan** | Queen decomposes the objective into a task graph via LLM |
 | 🐝 Foragers depart | **Delegate** | Ready tasks are assigned to workers respecting dependencies |
 | 🐝 Foragers gather | **Monitor** | Workers execute in parallel; Queen polls for completion |
@@ -28,7 +33,7 @@ The loop repeats until all tasks are complete, the objective is satisfied, or a 
 
 ## Architecture
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────┐
 │                       USER OBJECTIVE                            │
 │              "Refactor the auth module to use JWT"              │
@@ -128,7 +133,7 @@ Tasks respect dependency ordering — `test` won't start until `lint` completes.
 Waggle wraps coding agent CLIs behind a uniform interface. The **Task Router** maps task types to adapters.
 
 | Adapter | CLI | Invocation | Notes |
-|---|---|---|---|
+| ------- | ---------- | ----------- | ----------- |
 | `claude-code` | Claude Code | `claude -p "<prompt>"` | Default adapter |
 | `kimi` | Kimi Code | `kimi --print --final-message-only -p "<prompt>"` | |
 | `gemini` | Gemini CLI | `echo "<prompt>" \| gemini` | Pipe-based |
@@ -178,7 +183,7 @@ Running `waggle init` creates a `waggle.json` configuration file:
 ```
 
 | Section | Key Fields | Description |
-|---|---|---|
+| ------- | ---------- | ----------- |
 | `queen` | `provider`, `model` | The Queen's own LLM for planning, review, and replanning. Providers: `anthropic`, `kimi`, `gemini`, `claude-cli`, `opencode` |
 | `queen` | `max_iterations` | Hard cap on the plan-delegate-monitor-review loop |
 | `workers` | `max_parallel` | Size of the worker pool (the swarm) |
@@ -189,34 +194,34 @@ Running `waggle init` creates a `waggle.json` configuration file:
 
 ## Project Structure
 
-```
+```bash
 waggle/
 ├── cmd/waggle/              # CLI entry point
 │   ├── main.go
-│   ├── app.go               #   urfave/cli app definition + flags
-│   ├── commands.go           #   init, run, resume, config handlers
-│   ├── status.go             #   session / task status display
-│   └── tasks.go              #   task file loader
+│   ├── app.go               # urfave/cli app definition + flags
+│   ├── commands.go           # init, run, resume, config handlers
+│   ├── status.go             # session / task status display
+│   └── tasks.go              # task file loader
 ├── internal/
 │   ├── queen/               # 👑 The Queen — orchestration loop
 │   │   ├── queen.go          #   Plan → Delegate → Monitor → Review
-│   │   ├── review.go         #   LLM-backed result evaluation
-│   │   └── replan.go         #   LLM-backed replanning
+│   │   ├── review.go         # LLM-backed result evaluation
+│   │   └── replan.go         # LLM-backed replanning
 │   ├── worker/              # 🐝 Worker pool manager
 │   │   └── worker.go
 │   ├── adapter/             # CLI wrapper adapters
-│   │   ├── adapter.go        #   Registry + Task Router
-│   │   ├── claude.go         #   Claude Code
-│   │   ├── kimi.go           #   Kimi Code
-│   │   ├── gemini.go         #   Gemini CLI
-│   │   ├── codex.go          #   Codex
-│   │   ├── opencode.go       #   OpenCode
-│   │   └── exec.go           #   Direct shell execution
+│   │   ├── adapter.go        # Registry + Task Router
+│   │   ├── claude.go         # Claude Code
+│   │   ├── kimi.go           # Kimi Code
+│   │   ├── gemini.go         # Gemini CLI
+│   │   ├── codex.go          # Codex
+│   │   ├── opencode.go       # OpenCode
+│   │   └── exec.go           # Direct shell execution
 │   ├── llm/                 # 🧠 Queen's LLM client
-│   │   ├── client.go         #   Client interface
-│   │   ├── factory.go        #   Provider factory
-│   │   ├── anthropic.go      #   Anthropic API client
-│   │   └── cli.go            #   CLI-based LLM wrapper
+│   │   ├── client.go         # Client interface
+│   │   ├── factory.go        # Provider factory
+│   │   ├── anthropic.go      # Anthropic API client
+│   │   └── cli.go            # CLI-based LLM wrapper
 │   ├── task/                # 📌 Task graph with dependency tracking
 │   │   └── task.go
 │   ├── state/               # 💾 SQLite persistence (WAL mode)
@@ -225,9 +230,9 @@ waggle/
 │   │   └── bus.go
 │   ├── blackboard/          # 📋 Shared memory for inter-agent comms
 │   │   └── blackboard.go
-│   ├── safety/              # 🛡️  Path restriction + command filtering
+│   ├── safety/              # 🛡️ Path restriction + command filtering
 │   │   └── safety.go
-│   ├── config/              # ⚙️  Configuration management
+│   ├── config/              # ⚙️ Configuration management
 │   │   └── config.go
 │   ├── compact/             # 📦 Context window compaction
 │   │   └── compact.go
@@ -242,7 +247,9 @@ waggle/
 
 ### 1. Plan
 
-The Queen receives a user objective and calls her LLM to decompose it into a **task graph** — a directed acyclic graph of typed, prioritized tasks with dependency edges. The graph undergoes **cycle detection** to guarantee it can be topologically sorted. Each task carries:
+The Queen receives a user objective and calls her LLM to decompose it into a **task graph** — a
+directed acyclic graph of typed, prioritized tasks with dependency edges. The graph undergoes
+**cycle detection** to guarantee it can be topologically sorted. Each task carries:
 
 - **Type** — `code`, `research`, `test`, `review`, or `generic`
 - **Priority** — `critical` (3), `high` (2), `normal` (1), `low` (0)
@@ -254,7 +261,10 @@ If a `--tasks` file is provided, the planning phase is skipped and the file is l
 
 ### 2. Delegate
 
-The Queen queries the task graph for **ready tasks** — those whose dependencies are all satisfied. Ready tasks are assigned to workers from the pool (the swarm), up to `max_parallel` concurrency. The **Task Router** selects the appropriate adapter for each task type, or falls back to the configured default.
+The Queen queries the task graph for **ready tasks** — those whose dependencies are all satisfied.
+Ready tasks are assigned to workers from the pool (the swarm), up to `max_parallel` concurrency.
+The **Task Router** selects the appropriate adapter for each task type, or falls back to the
+configured default.
 
 ### 3. Monitor
 
@@ -265,19 +275,24 @@ Workers execute their assigned tasks as external processes. The Queen polls each
 When a task completes, the Queen evaluates the result:
 
 - **Exit-code check** — did the process succeed?
-- **LLM review** (if configured) — the Queen's LLM reads the task description and the worker's output, then returns a structured verdict: approved, rejected, or approved with suggestions for follow-up work.
+- **LLM review** (if configured) — the Queen's LLM reads the task description and the worker's
+  output, then returns a structured verdict: approved, rejected, or approved with suggestions for
+  follow-up work.
 
 Rejected tasks are retried up to `max_retries` before being marked as failed.
 
 ### 5. Replan
 
-After all current tasks are reviewed, the Queen consults her LLM to decide whether the objective has been met or whether additional tasks are needed. New tasks are injected into the graph with proper dependency edges, and the loop returns to **Delegate**. This continues until the objective is satisfied or `max_iterations` is reached.
+After all current tasks are reviewed, the Queen consults her LLM to decide whether the objective
+has been met or whether additional tasks are needed. New tasks are injected into the graph with
+proper dependency edges, and the loop returns to **Delegate**. This continues until the objective
+is satisfied or `max_iterations` is reached.
 
 ## Persistence
 
 All state lives in the `.hive/` directory:
 
-```
+```bash
 .hive/
 └── hive.db          # SQLite database (WAL mode)
 ```

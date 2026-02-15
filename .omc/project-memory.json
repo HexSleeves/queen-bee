@@ -74,8 +74,8 @@
     },
     {
       "path": "go.mod",
-      "accessCount": 5,
-      "lastAccessed": 1771039850162,
+      "accessCount": 6,
+      "lastAccessed": 1771123782623,
       "type": "file"
     },
     {
@@ -97,11 +97,36 @@
       "type": "file"
     },
     {
+      "path": "internal/config/config.go",
+      "accessCount": 2,
+      "lastAccessed": 1771123782102,
+      "type": "file"
+    },
+    {
       "path": "cmd/queen-bee/tasks.go",
       "accessCount": 1,
       "lastAccessed": 1771040610691,
       "type": "file"
+    },
+    {
+      "path": "internal/safety/safety.go",
+      "accessCount": 1,
+      "lastAccessed": 1771123778212,
+      "type": "file"
+    },
+    {
+      "path": "internal/adapter/safety_integration_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1771123785736,
+      "type": "file"
+    },
+    {
+      "path": "internal/queen/queen_test.go",
+      "accessCount": 1,
+      "lastAccessed": 1771123785737,
+      "type": "file"
     }
   ],
   "userDirectives": []
+}
 }

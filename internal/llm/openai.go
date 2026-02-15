@@ -23,18 +23,18 @@ type OpenAIClient struct {
 // OpenAI API request/response types
 
 type openaiRequest struct {
-	Model       string             `json:"model"`
-	Messages    []openaiMessage    `json:"messages"`
-	Tools       []openaiTool       `json:"tools,omitempty"`
-	MaxCompletionTokens int      `json:"max_completion_tokens,omitempty"`
-	Temperature *float64           `json:"temperature,omitempty"`
+	Model               string          `json:"model"`
+	Messages            []openaiMessage `json:"messages"`
+	Tools               []openaiTool    `json:"tools,omitempty"`
+	MaxCompletionTokens int             `json:"max_completion_tokens,omitempty"`
+	Temperature         *float64        `json:"temperature,omitempty"`
 }
 
 type openaiMessage struct {
-	Role       string              `json:"role"`
-	Content    any                 `json:"content,omitempty"` // string or []openaiContentPart
-	ToolCalls  []openaiToolCall    `json:"tool_calls,omitempty"`
-	ToolCallID string              `json:"tool_call_id,omitempty"`
+	Role       string           `json:"role"`
+	Content    any              `json:"content,omitempty"` // string or []openaiContentPart
+	ToolCalls  []openaiToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string           `json:"tool_call_id,omitempty"`
 }
 
 type openaiContentPart struct {
@@ -43,8 +43,8 @@ type openaiContentPart struct {
 }
 
 type openaiTool struct {
-	Type     string           `json:"type"` // "function"
-	Function openaiFunction   `json:"function"`
+	Type     string         `json:"type"` // "function"
+	Function openaiFunction `json:"function"`
 }
 
 type openaiFunction struct {
@@ -117,8 +117,8 @@ func (c *OpenAIClient) ChatWithHistory(ctx context.Context, systemPrompt string,
 	}
 
 	reqBody := openaiRequest{
-		Model:     c.model,
-		Messages:  apiMessages,
+		Model:               c.model,
+		Messages:            apiMessages,
 		MaxCompletionTokens: 4096,
 	}
 
@@ -211,9 +211,9 @@ func (c *OpenAIClient) ChatWithTools(ctx context.Context, systemPrompt string,
 	}
 
 	reqBody := openaiRequest{
-		Model:     c.model,
-		Messages:  apiMessages,
-		Tools:     apiTools,
+		Model:               c.model,
+		Messages:            apiMessages,
+		Tools:               apiTools,
 		MaxCompletionTokens: 8192,
 	}
 

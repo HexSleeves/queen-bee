@@ -11,3 +11,5 @@ waggle.json
 *.exe
 *.test
 *.out
+
+.omc*

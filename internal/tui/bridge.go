@@ -59,22 +59,22 @@ func (p *Program) Send(msg tea.Msg) {
 
 // SendQueenThinking sends a Queen thinking line.
 func (p *Program) SendQueenThinking(text string) {
-	p.program.Send(QueenThinkingMsg{Text: text})
+	p.Send(QueenThinkingMsg{Text: text})
 }
 
 // SendToolCall sends a tool call event.
 func (p *Program) SendToolCall(name, input string) {
-	p.program.Send(ToolCallMsg{Name: name, Input: input})
+	p.Send(ToolCallMsg{Name: name, Input: input})
 }
 
 // SendToolResult sends a tool result event.
 func (p *Program) SendToolResult(name, result string, isError bool) {
-	p.program.Send(ToolResultMsg{Name: name, Result: result, IsError: isError})
+	p.Send(ToolResultMsg{Name: name, Result: result, IsError: isError})
 }
 
 // SendTaskUpdate sends a task status change.
 func (p *Program) SendTaskUpdate(id, title, taskType, status, workerID string) {
-	p.program.Send(TaskUpdateMsg{
+	p.Send(TaskUpdateMsg{
 		ID: id, Title: title, Type: taskType,
 		Status: status, WorkerID: workerID,
 	})
@@ -82,17 +82,17 @@ func (p *Program) SendTaskUpdate(id, title, taskType, status, workerID string) {
 
 // SendTurn sends a turn update.
 func (p *Program) SendTurn(turn, maxTurn int) {
-	p.program.Send(TurnMsg{Turn: turn, MaxTurn: maxTurn})
+	p.Send(TurnMsg{Turn: turn, MaxTurn: maxTurn})
 }
 
 // SendDone sends the completion message.
 func (p *Program) SendDone(success bool, summary, errMsg string) {
-	p.program.Send(DoneMsg{Success: success, Summary: summary, Error: errMsg})
+	p.Send(DoneMsg{Success: success, Summary: summary, Error: errMsg})
 }
 
 // SendLog sends a raw log line.
 func (p *Program) SendLog(text string) {
-	p.program.Send(LogMsg{Text: text})
+	p.Send(LogMsg{Text: text})
 }
 
 // LogWriter returns an io.Writer that sends each line to the TUI as a LogMsg.
