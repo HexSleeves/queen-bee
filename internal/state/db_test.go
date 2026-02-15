@@ -117,9 +117,13 @@ func TestDBLatestSession(t *testing.T) {
 	}
 
 	// Create sessions
-	db.CreateSession(ctx, "session-1", "First")
+	if err := db.CreateSession(ctx, "session-1", "First"); err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(10 * time.Millisecond)
-	db.CreateSession(ctx, "session-2", "Second")
+	if err := db.CreateSession(ctx, "session-2", "Second"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Get latest
 	latest, err := db.LatestSession(ctx)
@@ -140,7 +144,9 @@ func TestDBEventOperations(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Append events
 	id1, err := db.AppendEvent(ctx, "session-1", "task.created", map[string]string{"task": "task-1"})
@@ -151,7 +157,7 @@ func TestDBEventOperations(t *testing.T) {
 		t.Errorf("Expected event ID 1, got %d", id1)
 	}
 
-	id2, err := db.AppendEvent(ctx, "session-1", "task.completed", map[string]string{"task": "task-1"})
+	id2, _ := db.AppendEvent(ctx, "session-1", "task.completed", map[string]string{"task": "task-1"})
 	if id2 != 2 {
 		t.Errorf("Expected event ID 2, got %d", id2)
 	}
@@ -181,7 +187,9 @@ func TestDBTaskOperations(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Insert task
 	task := TaskRow{
@@ -252,8 +260,12 @@ func TestDBUpdateTaskWorker(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Test"})
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Test"}); err != nil {
+		t.Fatal(err)
+	}
 
 	err := db.UpdateTaskWorker(ctx, "session-1", "task-1", "worker-123")
 	if err != nil {
@@ -272,8 +284,12 @@ func TestDBUpdateTaskResult(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Test"})
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Test"}); err != nil {
+		t.Fatal(err)
+	}
 
 	result := map[string]interface{}{
 		"success": true,
@@ -300,8 +316,12 @@ func TestDBIncrementTaskRetry(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Test", RetryCount: 0})
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Test", RetryCount: 0}); err != nil {
+		t.Fatal(err)
+	}
 
 	count, err := db.IncrementTaskRetry(ctx, "session-1", "task-1")
 	if err != nil {
@@ -323,7 +343,9 @@ func TestDBGetTasks(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Insert multiple tasks
 	tasks := []TaskRow{
@@ -333,7 +355,9 @@ func TestDBGetTasks(t *testing.T) {
 	}
 
 	for _, task := range tasks {
-		db.InsertTask(ctx, "session-1", task)
+		if err := db.InsertTask(ctx, "session-1", task); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Get all tasks
@@ -357,11 +381,19 @@ func TestDBGetTasksByStatus(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
 
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Task 1"})
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-2", Type: "code", Status: "running", Title: "Task 2"})
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-3", Type: "code", Status: "pending", Title: "Task 3"})
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Task 1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-2", Type: "code", Status: "running", Title: "Task 2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-3", Type: "code", Status: "pending", Title: "Task 3"}); err != nil {
+		t.Fatal(err)
+	}
 
 	pending, err := db.GetTasksByStatus(ctx, "session-1", "pending")
 	if err != nil {
@@ -383,12 +415,22 @@ func TestDBCountTasksByStatus(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
 
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Task 1"})
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-2", Type: "code", Status: "pending", Title: "Task 2"})
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-3", Type: "code", Status: "running", Title: "Task 3"})
-	db.InsertTask(ctx, "session-1", TaskRow{ID: "task-4", Type: "code", Status: "complete", Title: "Task 4"})
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-1", Type: "code", Status: "pending", Title: "Task 1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-2", Type: "code", Status: "pending", Title: "Task 2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-3", Type: "code", Status: "running", Title: "Task 3"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTask(ctx, "session-1", TaskRow{ID: "task-4", Type: "code", Status: "complete", Title: "Task 4"}); err != nil {
+		t.Fatal(err)
+	}
 
 	counts, err := db.CountTasksByStatus(ctx, "session-1")
 	if err != nil {
@@ -412,7 +454,9 @@ func TestDBBlackboardOperations(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
-	db.CreateSession(ctx, "session-1", "Test")
+	if err := db.CreateSession(ctx, "session-1", "Test"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Post entry
 	err := db.PostBlackboard(ctx, "session-1", "config", "{\"key\": \"value\"}", "worker-1", "task-1", "config,important")
@@ -430,7 +474,9 @@ func TestDBBlackboardOperations(t *testing.T) {
 	}
 
 	// Update entry
-	db.PostBlackboard(ctx, "session-1", "config", "{\"key\": \"updated\"}", "worker-2", "task-2", "config")
+	if err := db.PostBlackboard(ctx, "session-1", "config", "{\"key\": \"updated\"}", "worker-2", "task-2", "config"); err != nil {
+		t.Fatal(err)
+	}
 
 	value, _ = db.ReadBlackboard(ctx, "session-1", "config")
 	if value != "{\"key\": \"updated\"}" {
@@ -461,7 +507,9 @@ func TestDBKVMemoryOperations(t *testing.T) {
 	}
 
 	// Update KV
-	db.SetKV(ctx, "key1", "updated")
+	if err := db.SetKV(ctx, "key1", "updated"); err != nil {
+		t.Fatal(err)
+	}
 	value, _ = db.GetKV(ctx, "key1")
 	if value != "updated" {
 		t.Errorf("Expected 'updated', got %s", value)

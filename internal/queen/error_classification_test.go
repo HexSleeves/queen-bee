@@ -72,7 +72,7 @@ func TestErrorClassification(t *testing.T) {
 	}
 
 	q.tasks.Add(testTask)
-	q.db.InsertTask(context.Background(), q.sessionID, state.TaskRow{
+	if err := q.db.InsertTask(context.Background(), q.sessionID, state.TaskRow{
 		ID:         testTask.ID,
 		Type:       string(testTask.Type),
 		Status:     string(testTask.Status),
@@ -80,7 +80,9 @@ func TestErrorClassification(t *testing.T) {
 		Title:      testTask.Title,
 		MaxRetries: testTask.MaxRetries,
 		RetryCount: testTask.RetryCount,
-	})
+	}); err != nil {
+		t.Fatalf("insert task: %v", err)
+	}
 
 	// Test 1: Retryable error (network timeout)
 	t.Run("RetryableError", func(t *testing.T) {
@@ -92,7 +94,9 @@ func TestErrorClassification(t *testing.T) {
 		// Reset task state
 		testTask.RetryCount = 0
 		testTask.Status = task.StatusRunning
-		q.tasks.UpdateStatus(testTask.ID, task.StatusRunning)
+		if err := q.tasks.UpdateStatus(testTask.ID, task.StatusRunning); err != nil {
+			t.Fatalf("update status: %v", err)
+		}
 
 		ctx := make(map[string]interface{})
 		_ = ctx
@@ -128,7 +132,9 @@ func TestErrorClassification(t *testing.T) {
 		// Reset task state
 		testTask.RetryCount = 0
 		testTask.Status = task.StatusRunning
-		q.tasks.UpdateStatus(testTask.ID, task.StatusRunning)
+		if err := q.tasks.UpdateStatus(testTask.ID, task.StatusRunning); err != nil {
+			t.Fatalf("update status: %v", err)
+		}
 
 		q.handleTaskFailure(context.Background(), testTask.ID, "worker-2", permanentResult)
 
@@ -162,7 +168,9 @@ func TestErrorClassification(t *testing.T) {
 		// Reset task state
 		testTask.RetryCount = 0
 		testTask.Status = task.StatusRunning
-		q.tasks.UpdateStatus(testTask.ID, task.StatusRunning)
+		if err := q.tasks.UpdateStatus(testTask.ID, task.StatusRunning); err != nil {
+			t.Fatalf("update status: %v", err)
+		}
 
 		q.handleTaskFailure(context.Background(), testTask.ID, "worker-3", panicResult)
 
@@ -187,7 +195,9 @@ func TestErrorClassification(t *testing.T) {
 		// Set retry count at max
 		testTask.RetryCount = 3
 		testTask.Status = task.StatusRunning
-		q.tasks.UpdateStatus(testTask.ID, task.StatusRunning)
+		if err := q.tasks.UpdateStatus(testTask.ID, task.StatusRunning); err != nil {
+			t.Fatalf("update status: %v", err)
+		}
 
 		q.handleTaskFailure(context.Background(), testTask.ID, "worker-4", retryableResult)
 

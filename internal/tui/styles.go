@@ -7,7 +7,6 @@ var (
 	colorGold    = lipgloss.Color("#F5A623")
 	colorAmber   = lipgloss.Color("#E8912D")
 	colorHoney   = lipgloss.Color("#FFD700")
-	colorDark    = lipgloss.Color("#1A1A2E")
 	colorDimGray = lipgloss.Color("#555555")
 	colorGreen   = lipgloss.Color("#50C878")
 	colorRed     = lipgloss.Color("#FF6B6B")

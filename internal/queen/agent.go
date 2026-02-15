@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/exedev/waggle/internal/llm"
+	"github.com/exedev/waggle/internal/task"
 )
 
 // RunAgent executes the Queen as an autonomous tool-using LLM agent.
@@ -38,9 +39,18 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 		return fmt.Errorf("no adapters available — install claude, codex, or opencode CLI")
 	}
 	defaultAdapter := q.cfg.Workers.DefaultAdapter
+	allTypes := []task.Type{task.TypeCode, task.TypeResearch, task.TypeTest, task.TypeReview, task.TypeGeneric}
 	if a, ok := q.registry.Get(defaultAdapter); !ok || !a.Available() {
 		if !q.quiet {
 			q.logger.Printf("⚠ Default adapter %q not available, falling back to: %s", defaultAdapter, available[0])
+		}
+		for _, tt := range allTypes {
+			q.router.SetRoute(tt, available[0])
+		}
+	} else {
+		// Ensure all task types route to the user's chosen adapter
+		for _, tt := range allTypes {
+			q.router.SetRoute(tt, defaultAdapter)
 		}
 	}
 	// Filter exec from display unless it's the chosen adapter
@@ -125,7 +135,9 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 		}
 
 		// Persist the turn
-		q.db.UpdateSessionPhase(ctx, q.sessionID, "agent", turn)
+		if err := q.db.UpdateSessionPhase(ctx, q.sessionID, "agent", turn); err != nil {
+			q.logger.Printf("⚠ Warning: failed to update session phase: %v", err)
+		}
 		q.persistTurn(ctx, turn, resp)
 
 		// If no tool calls, the Queen is done talking
@@ -133,7 +145,9 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 			if !q.quiet {
 				q.logger.Println("👑 Queen ended conversation without calling complete()")
 			}
-			q.db.UpdateSessionStatus(ctx, q.sessionID, "done")
+			if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "done"); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+			}
 			q.printReport()
 			return nil
 		}
@@ -200,7 +214,9 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 			if !q.quiet {
 				q.logger.Println("✅ Queen declared objective complete!")
 			}
-			q.db.UpdateSessionStatus(ctx, q.sessionID, "done")
+			if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "done"); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+			}
 			q.printReport()
 			return nil
 		}
@@ -208,7 +224,9 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 			if !q.quiet {
 				q.logger.Printf("❌ Queen declared failure: %s", failReason)
 			}
-			q.db.UpdateSessionStatus(ctx, q.sessionID, "failed")
+			if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "failed"); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+			}
 			return fmt.Errorf("queen declared failure: %s", failReason)
 		}
 
@@ -218,7 +236,9 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 		}
 	}
 
-	q.db.UpdateSessionStatus(ctx, q.sessionID, "failed")
+	if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "failed"); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+	}
 	return fmt.Errorf("queen exceeded max turns (%d)", maxTurns)
 }
 
@@ -292,7 +312,9 @@ func (q *Queen) RunAgentResume(ctx context.Context, sessionID string) error {
 		q.persistTurn(ctx, turn, resp)
 
 		if resp.StopReason == "end_turn" {
-			q.db.UpdateSessionStatus(ctx, q.sessionID, "done")
+			if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "done"); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+			}
 			q.printReport()
 			return nil
 		}
@@ -331,7 +353,9 @@ func (q *Queen) RunAgentResume(ctx context.Context, sessionID string) error {
 		}
 
 		if completed {
-			q.db.UpdateSessionStatus(ctx, q.sessionID, "done")
+			if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "done"); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+			}
 			q.printReport()
 			return nil
 		}
@@ -360,7 +384,9 @@ func (q *Queen) persistTurn(ctx context.Context, turn int, resp *llm.Response) {
 		q.logger.Printf("⚠ Failed to marshal turn: %v", err)
 		return
 	}
-	q.db.SetKV(ctx, fmt.Sprintf("agent_turn_%s_%d", q.sessionID, turn), string(data))
+	if err := q.db.SetKV(ctx, fmt.Sprintf("agent_turn_%s_%d", q.sessionID, turn), string(data)); err != nil {
+		q.logger.Printf("⚠ Warning: failed to persist turn: %v", err)
+	}
 }
 
 // loadConversation reconstructs the message history from persisted turns.

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -15,7 +14,6 @@ import (
 
 // DB is a SQLite-backed state store replacing the JSONL + JSON files
 type DB struct {
-	mu   sync.Mutex
 	db   *sql.DB
 	path string
 }
@@ -334,7 +332,7 @@ func (s *DB) UpdateTaskErrorType(ctx context.Context, sessionID, taskID, errorTy
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback() // no-op after commit
+	defer tx.Rollback() //nolint:errcheck // no-op after commit
 
 	_, err = tx.ExecContext(ctx,
 		`UPDATE tasks SET result_data = COALESCE(result_data, '{}') WHERE id = ? AND session_id = ?`,
@@ -361,7 +359,7 @@ func (s *DB) IncrementTaskRetry(ctx context.Context, sessionID, taskID string) (
 	if err != nil {
 		return 0, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback() // no-op after commit
+	defer tx.Rollback() //nolint:errcheck // no-op after commit
 
 	_, err = tx.ExecContext(ctx,
 		`UPDATE tasks SET retry_count = retry_count + 1 WHERE id = ? AND session_id = ?`,

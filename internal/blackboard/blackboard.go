@@ -1,6 +1,7 @@
 package blackboard
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -19,16 +20,18 @@ type Entry struct {
 
 // Blackboard is a shared memory space where workers post partial results
 type Blackboard struct {
-	mu      sync.RWMutex
-	entries map[string]*Entry
-	history []*Entry
-	bus     *bus.MessageBus
+	mu         sync.RWMutex
+	entries    map[string]*Entry
+	history    []*Entry
+	maxHistory int
+	bus        *bus.MessageBus
 }
 
 func New(b *bus.MessageBus) *Blackboard {
 	return &Blackboard{
-		entries: make(map[string]*Entry),
-		bus:     b,
+		entries:    make(map[string]*Entry),
+		maxHistory: 10000, // default cap to prevent unbounded growth
+		bus:        b,
 	}
 }
 
@@ -40,6 +43,12 @@ func (bb *Blackboard) Post(entry *Entry) {
 	entry.Timestamp = time.Now()
 	bb.entries[entry.Key] = entry
 	bb.history = append(bb.history, entry)
+	// Cap history to prevent unbounded memory growth
+	if bb.maxHistory > 0 && len(bb.history) > bb.maxHistory {
+		trimmed := make([]*Entry, bb.maxHistory)
+		copy(trimmed, bb.history[len(bb.history)-bb.maxHistory:])
+		bb.history = trimmed
+	}
 
 	if bb.bus != nil {
 		bb.bus.Publish(bus.Message{
@@ -136,11 +145,12 @@ func (bb *Blackboard) History() []*Entry {
 	return cp
 }
 
-// Clear removes all entries
+// Clear removes all entries and resets history
 func (bb *Blackboard) Clear() {
 	bb.mu.Lock()
 	defer bb.mu.Unlock()
 	bb.entries = make(map[string]*Entry)
+	bb.history = bb.history[:0]
 }
 
 // Summarize returns a text summary of all entries (for context compaction)
@@ -150,13 +160,19 @@ func (bb *Blackboard) Summarize() string {
 	if len(bb.entries) == 0 {
 		return "Blackboard is empty."
 	}
-	summary := "Blackboard contents:\n"
+	var b strings.Builder
+	b.WriteString("Blackboard contents:\n")
 	for k, e := range bb.entries {
-		summary += "- [" + k + "] by " + e.PostedBy
+		b.WriteString("- [")
+		b.WriteString(k)
+		b.WriteString("] by ")
+		b.WriteString(e.PostedBy)
 		if e.TaskID != "" {
-			summary += " (task: " + e.TaskID + ")"
+			b.WriteString(" (task: ")
+			b.WriteString(e.TaskID)
+			b.WriteString(")")
 		}
-		summary += "\n"
+		b.WriteString("\n")
 	}
-	return summary
+	return b.String()
 }

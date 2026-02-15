@@ -14,6 +14,7 @@ import (
 	"github.com/exedev/waggle/internal/bus"
 	"github.com/exedev/waggle/internal/config"
 	"github.com/exedev/waggle/internal/llm"
+	"github.com/exedev/waggle/internal/safety"
 	"github.com/exedev/waggle/internal/state"
 	"github.com/exedev/waggle/internal/task"
 	"github.com/exedev/waggle/internal/worker"
@@ -30,7 +31,9 @@ func testQueen(t *testing.T) (*Queen, string) {
 	t.Cleanup(func() { os.RemoveAll(tmpDir) })
 
 	hiveDir := filepath.Join(tmpDir, ".hive")
-	os.MkdirAll(hiveDir, 0755)
+	if err := os.MkdirAll(hiveDir, 0755); err != nil {
+		t.Fatalf("create hive dir: %v", err)
+	}
 
 	db, err := state.OpenDB(hiveDir)
 	if err != nil {
@@ -66,7 +69,14 @@ func testQueen(t *testing.T) (*Queen, string) {
 
 	logger := log.New(os.Stderr, "[TEST] ", log.LstdFlags)
 	sessionID := "test-session"
-	db.CreateSession(context.Background(), sessionID, "test objective")
+	if err := db.CreateSession(context.Background(), sessionID, "test objective"); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	guard, err := safety.NewGuard(cfg.Safety, cfg.ProjectDir)
+	if err != nil {
+		t.Fatalf("create safety guard: %v", err)
+	}
 
 	q := &Queen{
 		cfg:         cfg,
@@ -75,6 +85,7 @@ func testQueen(t *testing.T) (*Queen, string) {
 		board:       board,
 		tasks:       tasks,
 		pool:        pool,
+		guard:       guard,
 		phase:       PhasePlan,
 		logger:      logger,
 		sessionID:   sessionID,
@@ -434,7 +445,9 @@ func TestReadFile(t *testing.T) {
 
 	// Write a test file
 	testContent := "line1\nline2\nline3\nline4\nline5\n"
-	os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte(testContent), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte(testContent), 0644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	result, err := handleReadFile(context.Background(), q, toJSON(map[string]interface{}{"path": "test.txt"}))
 	if err != nil {
@@ -449,7 +462,9 @@ func TestReadFileLineRange(t *testing.T) {
 	q, tmpDir := testQueen(t)
 
 	lines := "line1\nline2\nline3\nline4\nline5\n"
-	os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte(lines), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte(lines), 0644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
 
 	result, err := handleReadFile(context.Background(), q, toJSON(map[string]interface{}{
 		"path": "test.txt", "line_start": 2, "line_end": 4,
@@ -479,9 +494,15 @@ func TestListFiles(t *testing.T) {
 	q, tmpDir := testQueen(t)
 
 	// Create some files
-	os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte("package a"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("hello"), 0644)
-	os.MkdirAll(filepath.Join(tmpDir, "sub"), 0755)
+	if err := os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte("package a"), 0644); err != nil {
+		t.Fatalf("write a.go: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatalf("write b.txt: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmpDir, "sub"), 0755); err != nil {
+		t.Fatalf("create sub dir: %v", err)
+	}
 
 	result, err := handleListFiles(context.Background(), q, toJSON(map[string]interface{}{}))
 	if err != nil {
@@ -495,8 +516,12 @@ func TestListFiles(t *testing.T) {
 func TestListFilesWithPattern(t *testing.T) {
 	q, tmpDir := testQueen(t)
 
-	os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte("package a"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("hello"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte("package a"), 0644); err != nil {
+		t.Fatalf("write a.go: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "b.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatalf("write b.txt: %v", err)
+	}
 
 	result, err := handleListFiles(context.Background(), q, toJSON(map[string]interface{}{"pattern": "*.go"}))
 	if err != nil {

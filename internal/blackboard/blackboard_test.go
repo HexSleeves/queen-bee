@@ -350,9 +350,9 @@ func TestBlackboardClear(t *testing.T) {
 		t.Errorf("Expected 0 entries after clear, got %d", len(bb.entries))
 	}
 
-	// History should remain
-	if len(bb.history) != 2 {
-		t.Errorf("History should remain, expected 2 entries, got %d", len(bb.history))
+	// History should also be cleared
+	if len(bb.history) != 0 {
+		t.Errorf("History should be cleared, expected 0 entries, got %d", len(bb.history))
 	}
 }
 

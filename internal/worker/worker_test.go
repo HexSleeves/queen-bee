@@ -225,8 +225,8 @@ func TestPoolSpawnMaxParallel(t *testing.T) {
 	}
 
 	// Clean up
-	bee1.Kill()
-	bee2.Kill()
+	_ = bee1.Kill()
+	_ = bee2.Kill()
 }
 
 func TestPoolSpawnFactoryError(t *testing.T) {
@@ -318,7 +318,7 @@ func TestPoolActive(t *testing.T) {
 		t.Errorf("Expected 0 active workers after completion, got %d", len(active))
 	}
 
-	bee.Kill()
+	_ = bee.Kill()
 }
 
 func TestPoolActiveCount(t *testing.T) {
@@ -333,7 +333,7 @@ func TestPoolActiveCount(t *testing.T) {
 
 	ctx := context.Background()
 	task1 := &task.Task{ID: "task-1", Type: task.TypeCode, Status: task.StatusPending}
-	pool.Spawn(ctx, task1, "adapter")
+	_, _ = pool.Spawn(ctx, task1, "adapter")
 
 	if pool.ActiveCount() != 1 {
 		t.Errorf("Expected 1 active count, got %d", pool.ActiveCount())
@@ -379,10 +379,11 @@ func TestPoolCleanup(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Spawn workers
-	for i := 0; i < 3; i++ {
+	// Spawn workers (small delay between spawns to ensure unique worker IDs from UnixNano)
+	for i := range 3 {
 		task1 := &task.Task{ID: string(rune('a' + i)), Type: task.TypeCode, Status: task.StatusPending}
-		pool.Spawn(ctx, task1, "adapter")
+		_, _ = pool.Spawn(ctx, task1, "adapter")
+		time.Sleep(time.Millisecond)
 	}
 
 	// Wait for all to complete
@@ -456,7 +457,7 @@ func TestPoolConcurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			task1 := &task.Task{ID: string(rune('a' + id%26)), Type: task.TypeCode, Status: task.StatusPending}
-			pool.Spawn(ctx, task1, "adapter")
+			_, _ = pool.Spawn(ctx, task1, "adapter")
 		}(i)
 	}
 
@@ -739,7 +740,6 @@ func TestWorkerOutputMatchesResultOutput(t *testing.T) {
 // panickingMockBee simulates a worker that panics
 type panickingMockBee struct {
 	mockBee
-	panicValue interface{}
 }
 
 func (m *panickingMockBee) Spawn(ctx context.Context, t *task.Task) error {

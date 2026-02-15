@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/exedev/waggle/internal/bus"
 	"github.com/exedev/waggle/internal/compact"
 	"github.com/exedev/waggle/internal/config"
-	"github.com/exedev/waggle/internal/errors"
 	"github.com/exedev/waggle/internal/llm"
 	"github.com/exedev/waggle/internal/safety"
 	"github.com/exedev/waggle/internal/state"
@@ -56,7 +54,8 @@ type Queen struct {
 	logger    *log.Logger
 	lastErr   error
 
-	llm llm.Client // LLM client for AI-backed review/replan (nil = disabled)
+	llm   llm.Client    // LLM client for AI-backed review/replan (nil = disabled)
+	guard *safety.Guard // shared safety guard for tool calls
 
 	suppressReport bool // TUI mode: don't print report to stdout
 	quiet          bool // Quiet mode: only print completions/failures
@@ -297,6 +296,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 		registry:    registry,
 		ctx:         ctxMgr,
 		llm:         llmClient,
+		guard:       guard,
 		phase:       PhasePlan,
 		logger:      logger,
 		assignments: make(map[string]string),
@@ -305,7 +305,10 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	// Wire up event logging to SQLite
 	msgBus.SubscribeAll(func(msg bus.Message) {
 		if sid := q.sessionID; sid != "" {
-			q.db.AppendEvent(context.Background(), sid, string(msg.Type), msg)
+			_, err = q.db.AppendEvent(context.Background(), sid, string(msg.Type), msg)
+			if err != nil {
+				q.logger.Printf("⚠ Warning: failed to append event %s: %v", msg.Type, err)
+			}
 		}
 	})
 
@@ -414,7 +417,9 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 
 		case PhaseDone:
 			q.logger.Println("✅ All tasks complete!")
-			q.db.UpdateSessionStatus(ctx, q.sessionID, "done")
+			if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "done"); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+			}
 			q.printReport()
 			return nil
 
@@ -425,211 +430,14 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 		// Compact context if needed
 		if q.ctx.NeedsCompaction() {
 			q.logVerbose("📦 Compacting context...")
-			q.ctx.Compact(compact.DefaultSummarizer)
+			err := q.ctx.Compact(compact.DefaultSummarizer)
+			if err != nil {
+				q.logger.Printf("⚠ Warning: failed to compact context: %v", err)
+			}
 		}
 	}
 
 	return fmt.Errorf("max iterations (%d) reached", q.cfg.Queen.MaxIterations)
-}
-
-// plan decomposes the objective into tasks
-func (q *Queen) plan(ctx context.Context) error {
-	q.logVerbose("📋 Planning phase...")
-
-	// Check if we already have tasks from a resumed session
-	existing := q.tasks.All()
-	if len(existing) > 0 {
-		ready := q.tasks.Ready()
-		q.logVerbose("  Resuming: %d total tasks, %d ready", len(existing), len(ready))
-		return nil
-	}
-
-	// Check if pre-defined tasks were set (e.g., from --tasks flag or file)
-	if len(q.pendingTasks) > 0 {
-		for _, t := range q.pendingTasks {
-			q.tasks.Add(t)
-			q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
-				ID: t.ID, Type: string(t.Type), Status: string(t.Status),
-				Priority: int(t.Priority), Title: t.Title, Description: t.Description,
-				MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
-			})
-			q.logVerbose("  📌 Task: [%s] %s", t.Type, t.Title)
-		}
-		q.pendingTasks = nil
-		return nil
-	}
-
-	// For non-AI adapters (exec), create a single direct task from the objective
-	adapterName := q.router.Route(&task.Task{Type: task.TypeGeneric})
-	if adapterName == "exec" {
-		q.logVerbose("  Using exec adapter — treating objective as single task")
-		t := &task.Task{
-			ID:          fmt.Sprintf("task-%d", time.Now().UnixNano()),
-			Type:        task.TypeGeneric,
-			Status:      task.StatusPending,
-			Priority:    task.PriorityNormal,
-			Title:       "Execute objective",
-			Description: q.objective,
-			MaxRetries:  q.cfg.Workers.MaxRetries,
-			CreatedAt:   time.Now(),
-			Timeout:     q.cfg.Workers.DefaultTimeout,
-		}
-		q.tasks.Add(t)
-		q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
-			ID: t.ID, Type: string(t.Type), Status: string(t.Status),
-			Priority: int(t.Priority), Title: t.Title, Description: t.Description,
-			MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
-		})
-		q.logVerbose("  📌 Task: [%s] %s", t.Type, t.Title)
-		return nil
-	}
-
-	// Use AI adapter to decompose the objective
-	planTask := &task.Task{
-		ID:          fmt.Sprintf("plan-%d", time.Now().UnixNano()),
-		Type:        task.TypeGeneric,
-		Status:      task.StatusPending,
-		Priority:    task.PriorityCritical,
-		Title:       "Decompose objective into tasks",
-		Description: q.buildPlanPrompt(),
-		CreatedAt:   time.Now(),
-		Timeout:     q.cfg.Queen.PlanTimeout,
-	}
-
-	bee, err := q.pool.Spawn(ctx, planTask, adapterName)
-	if err != nil {
-		return fmt.Errorf("spawn planner: %w", err)
-	}
-
-	// Wait for planning to complete
-	if err := q.waitForWorker(ctx, bee, planTask.Timeout); err != nil {
-		return err
-	}
-
-	result := bee.Result()
-	if result == nil || !result.Success {
-		errMsg := "unknown error"
-		if output := bee.Output(); output != "" {
-			errMsg = output
-		} else if result != nil && len(result.Errors) > 0 {
-			errMsg = strings.Join(result.Errors, "; ")
-		}
-		return fmt.Errorf("planning failed: %s", errMsg)
-	}
-
-	// Parse the plan output into tasks
-	tasks, err := q.parsePlanOutput(result.Output)
-	if err != nil {
-		return fmt.Errorf("parse plan: %w", err)
-	}
-
-	for _, t := range tasks {
-		q.tasks.Add(t)
-		q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
-			ID: t.ID, Type: string(t.Type), Status: string(t.Status),
-			Priority: int(t.Priority), Title: t.Title, Description: t.Description,
-			MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
-		})
-		q.logVerbose("  📌 Task: [%s] %s", t.Type, t.Title)
-	}
-
-	q.ctx.Add("assistant", fmt.Sprintf("Plan created with %d tasks", len(tasks)))
-
-	return nil
-}
-
-// delegate assigns ready tasks to workers
-func (q *Queen) delegate(ctx context.Context) error {
-	q.logVerbose("📤 Delegation phase...")
-
-	ready := q.tasks.Ready()
-	if len(ready) == 0 {
-		q.logVerbose("  No tasks ready (all have unmet dependencies)")
-		return nil
-	}
-
-	// Sort by priority
-	sort.Slice(ready, func(i, j int) bool {
-		return ready[i].Priority > ready[j].Priority
-	})
-
-	for _, t := range ready {
-		if q.pool.ActiveCount() >= q.cfg.Workers.MaxParallel {
-			q.logVerbose("  ⏸ Max parallel workers reached, queuing remaining")
-			break
-		}
-
-		adapterName := q.router.Route(t)
-		if adapterName == "" {
-			q.logVerbose("  ⚠ No adapter for task %s, skipping", t.ID)
-			continue
-		}
-
-		// Inject default scope constraints into every task
-		t.Constraints = appendUnique(t.Constraints,
-			"Do NOT make changes outside the scope described in this task",
-			"Do NOT refactor, reorganize, or 'improve' code unrelated to this task",
-			"Do NOT modify function signatures unless explicitly asked to",
-			"If you find issues outside your scope, note them in your output but do NOT fix them",
-		)
-
-		bee, err := q.pool.Spawn(ctx, t, adapterName)
-		if err != nil {
-			q.logVerbose("  ⚠ Failed to spawn worker for %s: %v", t.ID, err)
-			continue
-		}
-
-		q.mu.Lock()
-		q.assignments[bee.ID()] = t.ID
-		q.mu.Unlock()
-
-		q.tasks.UpdateStatus(t.ID, task.StatusRunning)
-		t.WorkerID = bee.ID()
-
-		q.db.UpdateTaskStatus(ctx, q.sessionID, t.ID, "running")
-		q.db.UpdateTaskWorker(ctx, q.sessionID, t.ID, bee.ID())
-
-		q.logVerbose("  🐝 Assigned [%s] %s -> %s (%s)", t.Type, t.Title, bee.ID(), adapterName)
-	}
-
-	return nil
-}
-
-// monitor watches running workers until all complete or fail
-func (q *Queen) monitor(ctx context.Context) error {
-	q.logVerbose("👁 Monitoring phase...")
-
-	pollInterval := 2 * time.Second
-	timeout := q.cfg.Workers.DefaultTimeout
-	deadline := time.Now().Add(timeout)
-	pollCount := 0
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		if time.Now().After(deadline) {
-			q.logVerbose("  ⏰ Monitoring timeout reached, killing stuck workers")
-			q.pool.KillAll()
-			return nil
-		}
-
-		active := q.pool.Active()
-		if len(active) == 0 {
-			q.logVerbose("  ✓ All workers finished")
-			return nil
-		}
-
-		if pollCount%5 == 0 { // Log every 10s instead of every 2s
-			q.logVerbose("  ⏳ %d workers active...", len(active))
-		}
-		pollCount++
-
-		time.Sleep(pollInterval)
-	}
 }
 
 // review examines completed work, handles failures
@@ -647,6 +455,10 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 	for workerID, taskID := range assignmentsCopy {
 		bee, ok := q.pool.Get(workerID)
 		if !ok {
+			// Worker gone — prune stale assignment
+			q.mu.Lock()
+			delete(q.assignments, workerID)
+			q.mu.Unlock()
 			continue
 		}
 
@@ -654,14 +466,21 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 		case worker.StatusComplete:
 			result := bee.Result()
 			if result != nil && result.Success {
-				q.tasks.UpdateStatus(taskID, task.StatusComplete)
+				if err := q.tasks.UpdateStatus(taskID, task.StatusComplete); err != nil {
+					q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+				}
 				t, _ := q.tasks.Get(taskID)
 				if t != nil {
 					t.Result = result
 				}
 
-				q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "complete")
-				q.db.UpdateTaskResult(ctx, q.sessionID, taskID, result)
+				if err := q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "complete"); err != nil {
+					q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+				}
+				err := q.db.UpdateTaskResult(ctx, q.sessionID, taskID, result)
+				if err != nil {
+					q.logger.Printf("⚠ Warning: failed to update task result %s: %v", taskID, err)
+				}
 
 				// Post result to blackboard
 				bbKey := fmt.Sprintf("result-%s", taskID)
@@ -676,7 +495,10 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 					TaskID:   taskID,
 					Tags:     []string{"result", string(t.Type)},
 				})
-				q.db.PostBlackboard(ctx, q.sessionID, bbKey, result.Output, workerID, taskID, tagsStr)
+				err = q.db.PostBlackboard(ctx, q.sessionID, bbKey, result.Output, workerID, taskID, tagsStr)
+				if err != nil {
+					q.logger.Printf("⚠ Warning: failed to post blackboard entry %s: %v", bbKey, err)
+				}
 
 				q.logVerbose("  ✅ Task %s completed by %s", taskID, workerID)
 
@@ -699,8 +521,12 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 							if len(verdict.Suggestions) > 0 {
 								t.Description += "\nSuggestions: " + strings.Join(verdict.Suggestions, "; ")
 							}
-							q.tasks.UpdateStatus(taskID, task.StatusPending)
-							q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "pending")
+							if err := q.tasks.UpdateStatus(taskID, task.StatusPending); err != nil {
+								q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+							}
+							if err := q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "pending"); err != nil {
+								q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+							}
 							q.logVerbose("  🔄 Re-queued task %s (attempt %d/%d)", taskID, t.RetryCount, t.MaxRetries)
 							continue
 						}
@@ -723,10 +549,18 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 			} else {
 				q.handleTaskFailure(ctx, taskID, workerID, result)
 			}
+			// Prune completed assignment
+			q.mu.Lock()
+			delete(q.assignments, workerID)
+			q.mu.Unlock()
 
 		case worker.StatusFailed:
 			result := bee.Result()
 			q.handleTaskFailure(ctx, taskID, workerID, result)
+			// Prune completed assignment
+			q.mu.Lock()
+			delete(q.assignments, workerID)
+			q.mu.Unlock()
 		}
 	}
 
@@ -742,12 +576,7 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 				q.logVerbose("  ⚠ LLM replan failed: %v (finishing)", err)
 			} else if len(newTasks) > 0 {
 				for _, t := range newTasks {
-					q.tasks.Add(t)
-					q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
-						ID: t.ID, Type: string(t.Type), Status: string(t.Status),
-						Priority: int(t.Priority), Title: t.Title, Description: t.Description,
-						MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
-					})
+					q.persistNewTask(ctx, t)
 					q.logVerbose("  📌 New task from replan: [%s] %s", t.Type, t.Title)
 				}
 				return false, nil // More work to do
@@ -775,239 +604,31 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-// handleTaskFailure manages retry logic for failed tasks with error classification
-func (q *Queen) handleTaskFailure(ctx context.Context, taskID, workerID string, result *task.Result) {
-	t, ok := q.tasks.Get(taskID)
-	if !ok {
-		return
-	}
+// --- Shared helpers ---
 
-	errMsg := "unknown error"
-	if result != nil && len(result.Errors) > 0 {
-		errMsg = strings.Join(result.Errors, "; ")
-	}
-
-	// Classify the error type
-	errType := errors.ClassifyError(fmt.Errorf("%s", errMsg))
-	t.LastError = errMsg
-	t.LastErrorType = string(errType)
-
-	// Update error type in database
-	if err := q.db.UpdateTaskErrorType(ctx, q.sessionID, taskID, t.LastErrorType); err != nil {
-		q.logger.Printf("  ⚠ Warning: failed to update task error type: %v", err)
-	}
-
-	q.logVerbose("  ❌ Task %s failed (%s): %s", taskID, errType, truncate(errMsg, 200))
-
-	// Check if error is retryable
-	isRetryable := errors.IsRetryable(fmt.Errorf("%s", errMsg))
-
-	// Don't increment retry count for permanent errors - they won't succeed on retry
-	if isRetryable && t.RetryCount < t.MaxRetries {
-		t.RetryCount++
-
-		// Calculate exponential backoff delay
-		baseDelay := 2 * time.Second
-		maxDelay := 60 * time.Second
-		backoffDelay := errors.CalculateBackoff(baseDelay, t.RetryCount-1, maxDelay)
-
-		q.tasks.UpdateStatus(taskID, task.StatusPending)
-		q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "pending")
-		q.db.UpdateTaskRetryCount(ctx, q.sessionID, taskID, t.RetryCount)
-
-		q.logVerbose("  🔄 Retrying task %s (attempt %d/%d) after %v backoff", taskID, t.RetryCount, t.MaxRetries, backoffDelay)
-
-		// Apply backoff by waiting before the task becomes ready again
-		go func() {
-			time.Sleep(backoffDelay)
-		}()
-	} else if !isRetryable {
-		// Permanent error - fail immediately without wasting retries
-		q.logVerbose("  💀 Task %s has permanent error, failing immediately", taskID)
-		q.tasks.UpdateStatus(taskID, task.StatusFailed)
-		q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "failed")
-	} else {
-		// Max retries exceeded
-		q.tasks.UpdateStatus(taskID, task.StatusFailed)
-		q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "failed")
-	}
+// injectDefaultConstraints adds scope-limiting constraints to a task.
+// Used by both delegate() and agent-mode handleAssignTask().
+func injectDefaultConstraints(t *task.Task) {
+	t.Constraints = appendUnique(t.Constraints,
+		"Do NOT make changes outside the scope described in this task",
+		"Do NOT refactor, reorganize, or 'improve' code unrelated to this task",
+		"Do NOT modify function signatures unless explicitly asked to",
+		"If you find issues outside your scope, note them in your output but do NOT fix them",
+	)
 }
 
-// handleFailure is the top-level failure handler
-func (q *Queen) handleFailure(ctx context.Context) error {
-	q.pool.KillAll()
-
-	failed := q.tasks.Failed()
-
-	// If there are no tasks at all, the failure happened before/during planning
-	if len(q.tasks.All()) == 0 {
-		errMsg := "unknown error"
-		if q.lastErr != nil {
-			errMsg = q.lastErr.Error()
-		}
-		return fmt.Errorf("queen failed during planning phase: %s", errMsg)
+// persistNewTask adds a task to the graph and persists it to the database.
+func (q *Queen) persistNewTask(ctx context.Context, t *task.Task) {
+	q.tasks.Add(t)
+	err := q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
+		ID: t.ID, Type: string(t.Type), Status: string(t.Status),
+		Priority: int(t.Priority), Title: t.Title, Description: t.Description,
+		MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
+	})
+	if err != nil {
+		q.logger.Printf("⚠ Warning: failed to persist new task %s: %v", t.ID, err)
+		q.tasks.Remove(t.ID)
 	}
-
-	var errs []string
-	for _, t := range failed {
-		errs = append(errs, fmt.Sprintf("[%s] %s", t.ID, t.Title))
-	}
-
-	return fmt.Errorf("queen failed: %d tasks could not be completed: %s",
-		len(failed), strings.Join(errs, ", "))
-}
-
-// buildPlanPrompt creates the prompt for the planning phase
-func (q *Queen) buildPlanPrompt() string {
-	var b strings.Builder
-	b.WriteString("You are a task planning agent. Decompose the following objective into discrete, parallelizable tasks.\n\n")
-	b.WriteString(fmt.Sprintf("OBJECTIVE: %s\n\n", q.objective))
-
-	b.WriteString("IMPORTANT PLANNING RULES:\n")
-	b.WriteString("- Each task MUST be narrowly scoped to exactly one concern\n")
-	b.WriteString("- Tasks MUST NOT make changes outside their described scope\n")
-	b.WriteString("- Each task should include a \"constraints\" field listing what it must NOT do\n")
-	b.WriteString("- Each task should include an \"allowed_paths\" field listing which files/dirs it may touch\n")
-	b.WriteString("- Prefer more small focused tasks over fewer broad tasks\n")
-	b.WriteString("- DO NOT combine unrelated changes into one task\n")
-	b.WriteString(fmt.Sprintf("- MAXIMIZE PARALLELISM: we have %d workers. Only add depends_on when a task truly cannot start without another's output. Independent tasks MUST have empty depends_on so they run in parallel.\n", q.cfg.Workers.MaxParallel))
-	b.WriteString("- DO NOT create linear chains of dependencies unless strictly necessary — if tasks touch different files, they are independent\n\n")
-
-	b.WriteString("Output a JSON array of tasks. Each task should have:\n")
-	b.WriteString(`- "id": unique string identifier` + "\n")
-	b.WriteString(`- "type": one of "code", "research", "test", "review", "generic"` + "\n")
-	b.WriteString(`- "title": short title` + "\n")
-	b.WriteString(`- "description": detailed description of what to do (be specific and narrow)` + "\n")
-	b.WriteString(`- "constraints": array of strings — things this task MUST NOT do (e.g., "Do not modify any files", "Only read, do not write", "Do not change function signatures", "Do not refactor code outside the described scope")` + "\n")
-	b.WriteString(`- "allowed_paths": array of file/directory paths this task may read or modify (e.g., ["internal/queen/queen.go", "internal/queen/"])` + "\n")
-	b.WriteString(`- "priority": 0-3 (0=low, 3=critical)` + "\n")
-	b.WriteString(`- "depends_on": array of task IDs this depends on (empty if independent)` + "\n")
-	b.WriteString(`- "max_retries": number of retries allowed (default 2)` + "\n")
-	b.WriteString("\nOutput ONLY the JSON array, no other text.\n")
-
-	// Include blackboard context if available
-	if summary := q.board.Summarize(); summary != "Blackboard is empty." {
-		b.WriteString("\nCurrent context from previous work:\n")
-		b.WriteString(summary)
-	}
-
-	return b.String()
-}
-
-// parsePlanOutput extracts tasks from the planner's JSON output
-func (q *Queen) parsePlanOutput(output string) ([]*task.Task, error) {
-	// Try to find JSON array in the output
-	output = strings.TrimSpace(output)
-
-	// Find the JSON array
-	start := strings.Index(output, "[")
-	end := strings.LastIndex(output, "]")
-	if start == -1 || end == -1 || end <= start {
-		// Fallback: create a single task from the output
-		return []*task.Task{{
-			ID:          fmt.Sprintf("task-%d", time.Now().UnixNano()),
-			Type:        task.TypeGeneric,
-			Status:      task.StatusPending,
-			Priority:    task.PriorityNormal,
-			Title:       "Execute objective",
-			Description: q.objective,
-			MaxRetries:  q.cfg.Workers.MaxRetries,
-			CreatedAt:   time.Now(),
-			Timeout:     q.cfg.Workers.DefaultTimeout,
-		}}, nil
-	}
-
-	jsonStr := output[start : end+1]
-
-	var rawTasks []map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &rawTasks); err != nil {
-		return nil, fmt.Errorf("parse JSON tasks: %w", err)
-	}
-
-	tasks := make([]*task.Task, 0, len(rawTasks))
-	for _, rt := range rawTasks {
-		t := &task.Task{
-			ID:           jsonStr_s(rt, "id"),
-			Type:         task.Type(jsonStr_s(rt, "type")),
-			Status:       task.StatusPending,
-			Priority:     task.Priority(jsonInt(rt, "priority")),
-			Title:        jsonStr_s(rt, "title"),
-			Description:  jsonStr_s(rt, "description"),
-			Constraints:  jsonStrSlice(rt, "constraints"),
-			AllowedPaths: jsonStrSlice(rt, "allowed_paths"),
-			DependsOn:    jsonStrSlice(rt, "depends_on"),
-			MaxRetries:   jsonInt(rt, "max_retries"),
-			CreatedAt:    time.Now(),
-			Timeout:      q.cfg.Workers.DefaultTimeout,
-		}
-		if t.ID == "" {
-			t.ID = fmt.Sprintf("task-%d", time.Now().UnixNano())
-		}
-		if t.MaxRetries == 0 {
-			t.MaxRetries = q.cfg.Workers.MaxRetries
-		}
-		tasks = append(tasks, t)
-	}
-
-	// Check for circular dependencies in the parsed tasks
-	// Create a temporary task graph to validate dependencies
-	tempGraph := task.NewTaskGraph(nil)
-	for _, t := range tasks {
-		tempGraph.Add(t)
-	}
-	if err := tempGraph.DetectCycles(); err != nil {
-		return nil, err
-	}
-
-	return tasks, nil
-}
-
-// buildSummary creates a completion summary
-func (q *Queen) buildSummary() map[string]interface{} {
-	allTasks := q.tasks.All()
-	completed := 0
-	for _, t := range allTasks {
-		if t.Status == task.StatusComplete {
-			completed++
-		}
-	}
-
-	return map[string]interface{}{
-		"objective":       q.objective,
-		"total_tasks":     len(allTasks),
-		"completed_tasks": completed,
-		"iterations":      q.iteration + 1,
-		"blackboard_keys": q.board.Keys(),
-	}
-}
-
-// TaskResult pairs a task with its result for ordered output
-type TaskResult struct {
-	ID          string
-	Title       string
-	Type        task.Type
-	Status      task.Status
-	Result      *task.Result
-	WorkerID    string
-	CompletedAt *time.Time
-}
-
-// Results returns all task results in creation order
-func (q *Queen) Results() []TaskResult {
-	var results []TaskResult
-	for _, t := range q.tasks.All() {
-		tr := TaskResult{
-			ID:          t.ID,
-			Title:       t.Title,
-			Type:        t.Type,
-			Status:      t.Status,
-			Result:      t.Result,
-			WorkerID:    t.WorkerID,
-			CompletedAt: t.CompletedAt,
-		}
-		results = append(results, tr)
-	}
-	return results
 }
 
 // savePhase saves the current phase and iteration to the database for resumption.
@@ -1028,7 +649,9 @@ func (q *Queen) Close() error {
 		// Only set status to 'stopped' if current status is not terminal
 		if session, err := q.db.GetSession(context.Background(), q.sessionID); err == nil {
 			if session.Status != "done" && session.Status != "failed" {
-				q.db.UpdateSessionStatus(context.Background(), q.sessionID, "stopped")
+				if err := q.db.UpdateSessionStatus(context.Background(), q.sessionID, "stopped"); err != nil {
+					q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+				}
 			}
 		}
 	}
@@ -1101,180 +724,4 @@ func (q *Queen) Status() map[string]interface{} {
 		"ready_tasks":    len(q.tasks.Ready()),
 		"context_tokens": q.ctx.TokenCount(),
 	}
-}
-
-// waitForWorker blocks until a worker completes or times out
-func (q *Queen) waitForWorker(ctx context.Context, bee worker.Bee, timeout time.Duration) error {
-	if timeout == 0 {
-		timeout = q.cfg.Workers.DefaultTimeout
-	}
-
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			bee.Kill()
-			return ctx.Err()
-		case <-deadline.C:
-			bee.Kill()
-			return fmt.Errorf("worker %s timed out after %v", bee.ID(), timeout)
-		case <-ticker.C:
-			status := bee.Monitor()
-			if status == worker.StatusComplete || status == worker.StatusFailed {
-				return nil
-			}
-		}
-	}
-}
-
-// printReport outputs a complete report of all task results
-func (q *Queen) printReport() {
-	if q.suppressReport {
-		return
-	}
-	results := q.Results()
-	if len(results) == 0 {
-		return
-	}
-
-	fmt.Println("")
-	fmt.Println("╔══════════════════════════════════════════════════╗")
-	fmt.Println("║            📋 FINAL REPORT                      ║")
-	fmt.Println("╚══════════════════════════════════════════════════╝")
-	fmt.Printf("\n  Objective: %s\n", q.objective)
-
-	completed := 0
-	failed := 0
-	for _, r := range results {
-		if r.Status == task.StatusComplete {
-			completed++
-		} else if r.Status == task.StatusFailed {
-			failed++
-		}
-	}
-	fmt.Printf("  Tasks: %d completed, %d failed, %d total\n", completed, failed, len(results))
-
-	for _, r := range results {
-		icon := "⏳"
-		switch r.Status {
-		case task.StatusComplete:
-			icon = "✅"
-		case task.StatusFailed:
-			icon = "❌"
-		}
-
-		fmt.Printf("\n  %s [%s] %s\n", icon, r.Type, r.Title)
-		fmt.Println("  " + strings.Repeat("─", 48))
-
-		if r.Result != nil && r.Result.Output != "" {
-			for _, line := range strings.Split(strings.TrimSpace(r.Result.Output), "\n") {
-				fmt.Printf("  %s\n", line)
-			}
-		} else if r.Result != nil && len(r.Result.Errors) > 0 {
-			for _, e := range r.Result.Errors {
-				if e != "" {
-					fmt.Printf("  ERROR: %s\n", e)
-				}
-			}
-		} else {
-			fmt.Println("  (no output)")
-		}
-	}
-
-	fmt.Println("")
-	fmt.Println("  " + strings.Repeat("═", 48))
-	fmt.Printf("  Session: %s\n", q.sessionID)
-	fmt.Printf("  Log: .hive/hive.db\n")
-	fmt.Println("")
-}
-
-// --- JSON parsing helpers (tolerant of LLM output variations) ---
-
-// appendUnique appends items to a slice, skipping duplicates.
-func appendUnique(slice []string, items ...string) []string {
-	existing := make(map[string]bool, len(slice))
-	for _, s := range slice {
-		existing[s] = true
-	}
-	for _, item := range items {
-		if !existing[item] {
-			slice = append(slice, item)
-			existing[item] = true
-		}
-	}
-	return slice
-}
-
-func jsonStr_s(m map[string]interface{}, key string) string {
-	v, ok := m[key]
-	if !ok {
-		return ""
-	}
-	switch val := v.(type) {
-	case string:
-		return val
-	case float64:
-		return fmt.Sprintf("%v", val)
-	default:
-		return fmt.Sprintf("%v", val)
-	}
-}
-
-func jsonInt(m map[string]interface{}, key string) int {
-	v, ok := m[key]
-	if !ok {
-		return 0
-	}
-	switch val := v.(type) {
-	case float64:
-		return int(val)
-	case string:
-		// Handle "high", "medium", "low" or numeric strings
-		switch strings.ToLower(val) {
-		case "critical":
-			return 3
-		case "high":
-			return 2
-		case "medium", "normal":
-			return 1
-		case "low":
-			return 0
-		default:
-			var n int
-			fmt.Sscanf(val, "%d", &n)
-			return n
-		}
-	default:
-		return 0
-	}
-}
-
-func jsonStrSlice(m map[string]interface{}, key string) []string {
-	v, ok := m[key]
-	if !ok || v == nil {
-		return nil
-	}
-	arr, ok := v.([]interface{})
-	if !ok {
-		return nil
-	}
-	result := make([]string, 0, len(arr))
-	for _, item := range arr {
-		if s, ok := item.(string); ok {
-			result = append(result, s)
-		}
-	}
-	return result
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
 }

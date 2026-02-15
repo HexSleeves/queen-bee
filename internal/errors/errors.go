@@ -6,6 +6,7 @@ package errors
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 )
@@ -273,8 +274,9 @@ func CalculateBackoff(baseDelay time.Duration, retryCount int, maxDelay time.Dur
 	return delay
 }
 
-// CalculateBackoffWithJitter calculates exponential backoff with random jitter
-// jitterPercent: percentage of delay to use as jitter (e.g., 0.1 = 10%)
+// CalculateBackoffWithJitter calculates exponential backoff with random jitter.
+// jitterPercent: percentage of delay to use as jitter (e.g., 0.1 = 10%).
+// The jitter is uniformly distributed in [-jitterPercent/2, +jitterPercent/2].
 func CalculateBackoffWithJitter(baseDelay time.Duration, retryCount int, maxDelay time.Duration, jitterPercent float64) time.Duration {
 	delay := CalculateBackoff(baseDelay, retryCount, maxDelay)
 
@@ -282,11 +284,14 @@ func CalculateBackoffWithJitter(baseDelay time.Duration, retryCount int, maxDela
 		return delay
 	}
 
-	// Simple jitter: reduce delay by up to jitterPercent
-	// In production, you might want crypto/rand for better randomness
-	jitter := time.Duration(float64(delay) * jitterPercent)
-	if jitter > 0 {
-		delay -= jitter / 2 // Reduce by up to half of jitter range
+	// Random jitter: offset delay by a random amount within [-half, +half]
+	jitterRange := float64(delay) * jitterPercent
+	// rand.Float64() returns [0.0, 1.0) — shift to [-0.5, 0.5)
+	offset := time.Duration(jitterRange * (rand.Float64() - 0.5))
+	delay += offset
+
+	if delay < 0 {
+		delay = 0
 	}
 
 	return delay

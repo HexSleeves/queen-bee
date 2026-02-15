@@ -356,14 +356,14 @@ func TestTaskGraphReady(t *testing.T) {
 	}
 
 	// Mark one as running
-	graph.UpdateStatus("b", StatusRunning)
+	_ = graph.UpdateStatus("b", StatusRunning)
 	ready = graph.Ready()
 	if len(ready) != 2 {
 		t.Errorf("Expected 2 ready tasks after one running, got %d", len(ready))
 	}
 
 	// Complete the dependency
-	graph.UpdateStatus("a", StatusComplete)
+	_ = graph.UpdateStatus("a", StatusComplete)
 	ready = graph.Ready()
 	if len(ready) != 2 {
 		t.Errorf("Expected 2 ready tasks, got %d", len(ready))

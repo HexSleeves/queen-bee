@@ -334,7 +334,9 @@ func setupTestQueen(t *testing.T) *Queen {
 	t.Helper()
 	tmpDir := t.TempDir()
 	hiveDir := filepath.Join(tmpDir, ".hive")
-	os.MkdirAll(hiveDir, 0755)
+	if err := os.MkdirAll(hiveDir, 0755); err != nil {
+		t.Fatalf("create hive dir: %v", err)
+	}
 
 	db, err := state.OpenDB(hiveDir)
 	if err != nil {

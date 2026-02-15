@@ -89,7 +89,7 @@ func (tr *TaskRouter) SetRoute(taskType task.Type, adapterName string) {
 
 func (tr *TaskRouter) Route(t *task.Task) string {
 	if name, ok := tr.routes[t.Type]; ok {
-		if _, avail := tr.registry.Get(name); avail {
+		if a, registered := tr.registry.Get(name); registered && a.Available() {
 			return name
 		}
 	}

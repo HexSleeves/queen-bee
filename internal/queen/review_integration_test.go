@@ -71,7 +71,9 @@ func reviewTestQueen(t *testing.T, mockClient *mockReviewClient) *Queen {
 	}
 
 	sessionID := "review-test-session"
-	db.CreateSession(context.Background(), sessionID, "test objective")
+	if err := db.CreateSession(context.Background(), sessionID, "test objective"); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
 
 	q := &Queen{
 		cfg:         cfg,

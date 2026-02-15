@@ -65,7 +65,10 @@ func (b *MessageBus) Publish(msg Message) {
 	b.mu.Lock()
 	b.history = append(b.history, msg)
 	if len(b.history) > b.maxHist {
-		b.history = b.history[len(b.history)-b.maxHist:]
+		// Copy to a new slice to release the old backing array
+		trimmed := make([]Message, b.maxHist)
+		copy(trimmed, b.history[len(b.history)-b.maxHist:])
+		b.history = trimmed
 	}
 	// Copy handlers under lock
 	specific := make([]Handler, len(b.handlers[msg.Type]))

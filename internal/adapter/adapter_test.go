@@ -49,8 +49,8 @@ func TestAdapterRegistry(t *testing.T) {
 // TestTaskRouter tests task routing functionality
 func TestTaskRouter(t *testing.T) {
 	registry := NewRegistry()
-	registry.Register(&MockAdapter{name: "claude-code"})
-	registry.Register(&MockAdapter{name: "codex"})
+	registry.Register(&MockAdapter{name: "claude-code", available: true})
+	registry.Register(&MockAdapter{name: "codex", available: true})
 
 	router := NewTaskRouter(registry, "claude-code")
 

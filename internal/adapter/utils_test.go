@@ -78,13 +78,13 @@ func TestStreamWriterExactCapHit(t *testing.T) {
 	sw := newStreamWriter(&mu, &buf, 50)
 
 	// Write exactly 50 bytes — should fit
-	sw.Write([]byte(strings.Repeat("x", 50)))
+	_, _ = sw.Write([]byte(strings.Repeat("x", 50)))
 	if buf.Len() != 50 {
 		t.Errorf("expected 50, got %d", buf.Len())
 	}
 
 	// Next write triggers truncation
-	sw.Write([]byte("a"))
+	_, _ = sw.Write([]byte("a"))
 	if !strings.Contains(buf.String(), truncationMarker) {
 		t.Error("expected truncation marker after exceeding cap")
 	}

@@ -92,26 +92,6 @@ func (m *mockBeeWithOutput) Output() string {
 	return m.output
 }
 
-func (m *mockBeeWithOutput) completeWithSuccess(output string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.status.Store(StatusComplete)
-	m.result = &task.Result{Success: true, Output: output}
-	close(m.completeChan)
-}
-
-func (m *mockBeeWithOutput) completeWithFailure(output string, errs []string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.status.Store(StatusFailed)
-	m.result = &task.Result{Success: false, Output: output, Errors: errs}
-	close(m.completeChan)
-}
-
-func (m *mockBeeWithOutput) completeWithEmptyOutput() {
-	m.completeWithSuccess("")
-}
-
 func TestWorkerStatusDetection(t *testing.T) {
 	tests := []struct {
 		name          string

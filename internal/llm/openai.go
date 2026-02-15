@@ -37,11 +37,6 @@ type openaiMessage struct {
 	ToolCallID string           `json:"tool_call_id,omitempty"`
 }
 
-type openaiContentPart struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
 type openaiTool struct {
 	Type     string         `json:"type"` // "function"
 	Function openaiFunction `json:"function"`

@@ -60,6 +60,7 @@ type Task struct {
 	StartedAt     *time.Time        `json:"started_at,omitempty"`
 	CompletedAt   *time.Time        `json:"completed_at,omitempty"`
 	Timeout       time.Duration     `json:"timeout,omitempty"`
+	RetryAfter    time.Time         `json:"retry_after,omitempty"` // backoff: don't schedule before this time
 	DependsOn     []string          `json:"depends_on,omitempty"`
 }
 
@@ -143,9 +144,14 @@ func (g *TaskGraph) UpdateStatus(id string, status Status) error {
 func (g *TaskGraph) Ready() []*Task {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
+	now := time.Now()
 	var ready []*Task
 	for _, t := range g.tasks {
 		if t.Status != StatusPending {
+			continue
+		}
+		// Respect backoff: skip tasks whose RetryAfter hasn't elapsed
+		if !t.RetryAfter.IsZero() && now.Before(t.RetryAfter) {
 			continue
 		}
 		allDone := true
@@ -219,10 +225,13 @@ func (g *TaskGraph) DetectCycles() error {
 
 // detectCycleDFS performs DFS from the given node to detect cycles.
 // Returns the cycle path if a cycle is detected, nil otherwise.
-func (g *TaskGraph) detectCycleDFS(nodeID string, visited, recStack map[string]bool, path []string) []string {
+func (g *TaskGraph) detectCycleDFS(nodeID string, visited, recStack map[string]bool, parentPath []string) []string {
 	visited[nodeID] = true
 	recStack[nodeID] = true
-	path = append(path, nodeID)
+	// Create a new slice to avoid aliasing the caller's backing array
+	path := make([]string, len(parentPath)+1)
+	copy(path, parentPath)
+	path[len(parentPath)] = nodeID
 
 	task, ok := g.tasks[nodeID]
 	if !ok {
@@ -246,7 +255,9 @@ func (g *TaskGraph) detectCycleDFS(nodeID string, visited, recStack map[string]b
 				}
 			}
 			if cycleStart >= 0 {
-				cycle := append(path[cycleStart:], depID)
+				cycle := make([]string, len(path[cycleStart:])+1)
+				copy(cycle, path[cycleStart:])
+				cycle[len(cycle)-1] = depID
 				return cycle
 			}
 		}

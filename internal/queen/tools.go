@@ -12,7 +12,6 @@ import (
 
 	"github.com/exedev/waggle/internal/blackboard"
 	"github.com/exedev/waggle/internal/llm"
-	"github.com/exedev/waggle/internal/safety"
 	"github.com/exedev/waggle/internal/state"
 	"github.com/exedev/waggle/internal/task"
 	"github.com/exedev/waggle/internal/worker"
@@ -275,18 +274,15 @@ func handleCreateTasks(ctx context.Context, q *Queen, input json.RawMessage) (st
 		return "", fmt.Errorf("cycle detected, tasks rolled back: %w", err)
 	}
 
-	// Persist to DB
+	// Persist to DB (tasks already added to graph above for cycle detection)
 	for _, t := range created {
-		q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
-			ID:          t.ID,
-			Type:        string(t.Type),
-			Status:      string(t.Status),
-			Priority:    int(t.Priority),
-			Title:       t.Title,
-			Description: t.Description,
-			MaxRetries:  t.MaxRetries,
-			DependsOn:   strings.Join(t.DependsOn, ","),
-		})
+		if err := q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
+			ID: t.ID, Type: string(t.Type), Status: string(t.Status),
+			Priority: int(t.Priority), Title: t.Title, Description: t.Description,
+			MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
+		}); err != nil {
+			q.logger.Printf("⚠ Warning: failed to insert task: %v", err)
+		}
 	}
 
 	// Build summary
@@ -339,13 +335,8 @@ func handleAssignTask(ctx context.Context, q *Queen, input json.RawMessage) (str
 		return "", fmt.Errorf("no adapter available for task type %s", t.Type)
 	}
 
-	// Inject default scope constraints (same as delegate())
-	t.Constraints = appendUnique(t.Constraints,
-		"Do NOT make changes outside the scope described in this task",
-		"Do NOT refactor, reorganize, or 'improve' code unrelated to this task",
-		"Do NOT modify function signatures unless explicitly asked to",
-		"If you find issues outside your scope, note them in your output but do NOT fix them",
-	)
+	// Inject default scope constraints (shared with delegate())
+	injectDefaultConstraints(t)
 
 	bee, err := q.pool.Spawn(ctx, t, adapterName)
 	if err != nil {
@@ -356,11 +347,17 @@ func handleAssignTask(ctx context.Context, q *Queen, input json.RawMessage) (str
 	q.assignments[bee.ID()] = t.ID
 	q.mu.Unlock()
 
-	q.tasks.UpdateStatus(t.ID, task.StatusRunning)
+	if err := q.tasks.UpdateStatus(t.ID, task.StatusRunning); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+	}
 	t.WorkerID = bee.ID()
 
-	q.db.UpdateTaskStatus(ctx, q.sessionID, t.ID, "running")
-	q.db.UpdateTaskWorker(ctx, q.sessionID, t.ID, bee.ID())
+	if err := q.db.UpdateTaskStatus(ctx, q.sessionID, t.ID, "running"); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+	}
+	if err := q.db.UpdateTaskWorker(ctx, q.sessionID, t.ID, bee.ID()); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update task worker: %v", err)
+	}
 
 	return fmt.Sprintf("Task %q assigned to worker %s (adapter: %s)", t.ID, bee.ID(), adapterName), nil
 }
@@ -519,9 +516,15 @@ func handleRejectTask(ctx context.Context, q *Queen, input json.RawMessage) (str
 	t.RetryCount++
 	t.Description += "\n\nREJECTED (attempt " + fmt.Sprintf("%d/%d", t.RetryCount, t.MaxRetries) + "): " + in.Feedback
 
-	q.tasks.UpdateStatus(in.TaskID, task.StatusPending)
-	q.db.UpdateTaskStatus(ctx, q.sessionID, in.TaskID, "pending")
-	q.db.UpdateTaskRetryCount(ctx, q.sessionID, in.TaskID, t.RetryCount)
+	if err := q.tasks.UpdateStatus(in.TaskID, task.StatusPending); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+	}
+	if err := q.db.UpdateTaskStatus(ctx, q.sessionID, in.TaskID, "pending"); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+	}
+	if err := q.db.UpdateTaskRetryCount(ctx, q.sessionID, in.TaskID, t.RetryCount); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update task retry count: %v", err)
+	}
 
 	// Post feedback to blackboard
 	q.board.Post(&blackboard.Entry{
@@ -565,7 +568,8 @@ func handleWaitForWorkers(ctx context.Context, q *Queen, input json.RawMessage) 
 		return "No workers currently running.", nil
 	}
 
-	deadline := time.After(time.Duration(timeoutSec) * time.Second)
+	timer := time.NewTimer(time.Duration(timeoutSec) * time.Second)
+	defer timer.Stop()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -573,7 +577,7 @@ func handleWaitForWorkers(ctx context.Context, q *Queen, input json.RawMessage) 
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
-		case <-deadline:
+		case <-timer.C:
 			return "Timeout reached. No workers completed during the wait period.", nil
 		case <-ticker.C:
 			// Check if any task changed status
@@ -629,13 +633,19 @@ func (q *Queen) processWorkerResults(ctx context.Context) {
 
 		result := bee.Result()
 		if status == worker.StatusComplete && result != nil && result.Success {
-			q.tasks.UpdateStatus(taskID, task.StatusComplete)
+			if err := q.tasks.UpdateStatus(taskID, task.StatusComplete); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+			}
 			t, _ := q.tasks.Get(taskID)
 			if t != nil {
 				t.Result = result
 			}
-			q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "complete")
-			q.db.UpdateTaskResult(ctx, q.sessionID, taskID, result)
+			if err := q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "complete"); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update task status: %v", err)
+			}
+			if err := q.db.UpdateTaskResult(ctx, q.sessionID, taskID, result); err != nil {
+				q.logger.Printf("⚠ Warning: failed to update task result: %v", err)
+			}
 
 			// Post to blackboard
 			bbKey := fmt.Sprintf("result-%s", taskID)
@@ -647,12 +657,8 @@ func (q *Queen) processWorkerResults(ctx context.Context) {
 				Tags:     []string{"result"},
 			})
 		} else {
-			q.tasks.UpdateStatus(taskID, task.StatusFailed)
-			t, _ := q.tasks.Get(taskID)
-			if t != nil {
-				t.Result = result
-			}
-			q.db.UpdateTaskStatus(ctx, q.sessionID, taskID, "failed")
+			// Use shared failure handling for error classification, retry, and backoff
+			q.handleTaskFailure(ctx, taskID, workerID, result)
 		}
 	}
 }
@@ -674,11 +680,7 @@ func handleReadFile(ctx context.Context, q *Queen, input json.RawMessage) (strin
 		return "", fmt.Errorf("path is required")
 	}
 
-	guard, err := safety.NewGuard(q.cfg.Safety, q.cfg.ProjectDir)
-	if err != nil {
-		return "", fmt.Errorf("init safety guard: %w", err)
-	}
-
+	guard := q.guard
 	if err := guard.CheckPath(in.Path); err != nil {
 		return "", err
 	}
@@ -743,11 +745,7 @@ func handleListFiles(ctx context.Context, q *Queen, input json.RawMessage) (stri
 		dir = "."
 	}
 
-	guard, err := safety.NewGuard(q.cfg.Safety, q.cfg.ProjectDir)
-	if err != nil {
-		return "", fmt.Errorf("init safety guard: %w", err)
-	}
-
+	guard := q.guard
 	if err := guard.CheckPath(dir); err != nil {
 		return "", err
 	}
@@ -758,9 +756,10 @@ func handleListFiles(ctx context.Context, q *Queen, input json.RawMessage) (stri
 	}
 
 	var files []string
+	var walkErr error
 	if in.Pattern != "" {
 		// Walk with pattern matching
-		err = filepath.Walk(fullDir, func(path string, info os.FileInfo, err error) error {
+		walkErr = filepath.Walk(fullDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil // skip errors
 			}
@@ -789,8 +788,8 @@ func handleListFiles(ctx context.Context, q *Queen, input json.RawMessage) (stri
 			files = append(files, name)
 		}
 	}
-	if err != nil {
-		return "", fmt.Errorf("walk directory: %w", err)
+	if walkErr != nil {
+		return "", fmt.Errorf("walk directory: %w", walkErr)
 	}
 
 	if len(files) == 0 {
@@ -815,7 +814,9 @@ func handleComplete(ctx context.Context, q *Queen, input json.RawMessage) (strin
 	}
 
 	q.phase = PhaseDone
-	q.db.UpdateSessionStatus(ctx, q.sessionID, "done")
+	if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "done"); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+	}
 
 	return fmt.Sprintf("Objective marked as done. Summary: %s", in.Summary), nil
 }
@@ -836,7 +837,9 @@ func handleFail(ctx context.Context, q *Queen, input json.RawMessage) (string, e
 	}
 
 	q.phase = PhaseFailed
-	q.db.UpdateSessionStatus(ctx, q.sessionID, "failed")
+	if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "failed"); err != nil {
+		q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
+	}
 	q.pool.KillAll()
 
 	return fmt.Sprintf("Objective marked as failed. Reason: %s", in.Reason), nil

@@ -104,18 +104,24 @@ func (p *Pool) Spawn(ctx context.Context, t *task.Task, adapterName string) (Bee
 		var cancel context.CancelFunc
 		spawnCtx, cancel = context.WithTimeout(ctx, t.Timeout)
 		// Monitor the deadline in a goroutine and publish a timeout event.
+		// Select on both parent and child context so the goroutine exits
+		// promptly when either is cancelled (e.g., SIGINT on parent).
 		go func() {
-			<-spawnCtx.Done()
-			cancel()
-			if spawnCtx.Err() == context.DeadlineExceeded {
-				if p.msgBus != nil {
-					p.msgBus.Publish(bus.Message{
-						Type:     bus.MsgWorkerFailed,
-						WorkerID: workerID,
-						TaskID:   t.ID,
-						Payload:  fmt.Sprintf("timed out after %s", t.Timeout),
-						Time:     time.Now(),
-					})
+			select {
+			case <-ctx.Done():
+				cancel()
+			case <-spawnCtx.Done():
+				cancel()
+				if spawnCtx.Err() == context.DeadlineExceeded {
+					if p.msgBus != nil {
+						p.msgBus.Publish(bus.Message{
+							Type:     bus.MsgWorkerFailed,
+							WorkerID: workerID,
+							TaskID:   t.ID,
+							Payload:  fmt.Sprintf("timed out after %s", t.Timeout),
+							Time:     time.Now(),
+						})
+					}
 				}
 			}
 		}()
@@ -154,18 +160,20 @@ func (p *Pool) ActiveCount() int {
 	return len(p.Active())
 }
 
-// KillAll terminates all running workers
-func (p *Pool) KillAll() {
+// KillAll terminates all running workers.
+// Returns any errors encountered during termination.
+func (p *Pool) KillAll() []error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	var errs []error
 	for _, w := range p.workers {
 		if w.Monitor() == StatusRunning {
-			err := w.Kill()
-			if err != nil {
-				fmt.Printf("error killing worker %s: %v\n", w.ID(), err)
+			if err := w.Kill(); err != nil {
+				errs = append(errs, fmt.Errorf("kill %s: %w", w.ID(), err))
 			}
 		}
 	}
+	return errs
 }
 
 // Cleanup removes completed/failed workers from the pool
