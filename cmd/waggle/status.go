@@ -11,7 +11,6 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-
 func cmdStatus(ctx context.Context, cmd *cli.Command) error {
 	projectDir := cmd.String("project")
 	logger := log.New(os.Stderr, "", log.LstdFlags)

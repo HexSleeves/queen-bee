@@ -278,14 +278,14 @@ func handleCreateTasks(ctx context.Context, q *Queen, input json.RawMessage) (st
 	// Persist to DB
 	for _, t := range created {
 		q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
-			ID:         t.ID,
-			Type:       string(t.Type),
-			Status:     string(t.Status),
-			Priority:   int(t.Priority),
-			Title:      t.Title,
+			ID:          t.ID,
+			Type:        string(t.Type),
+			Status:      string(t.Status),
+			Priority:    int(t.Priority),
+			Title:       t.Title,
 			Description: t.Description,
-			MaxRetries: t.MaxRetries,
-			DependsOn:  strings.Join(t.DependsOn, ","),
+			MaxRetries:  t.MaxRetries,
+			DependsOn:   strings.Join(t.DependsOn, ","),
 		})
 	}
 

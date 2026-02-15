@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	maxQueenLines  = 200
-	maxLogLines    = 100
-	tickInterval   = time.Second
+	maxQueenLines = 200
+	maxLogLines   = 100
+	tickInterval  = time.Second
 )
 
 // TaskInfo tracks task state for display.
@@ -36,19 +36,19 @@ type WorkerInfo struct {
 // Model is the Bubble Tea model for the Waggle TUI.
 type Model struct {
 	// Content
-	objective   string
-	queenLines  []queenLine // Queen panel lines
-	tasks       []TaskInfo  // ordered task list
-	taskMap     map[string]int // task ID -> index in tasks slice
-	workers     map[string]*WorkerInfo
+	objective  string
+	queenLines []queenLine    // Queen panel lines
+	tasks      []TaskInfo     // ordered task list
+	taskMap    map[string]int // task ID -> index in tasks slice
+	workers    map[string]*WorkerInfo
 
 	// State
-	turn        int
-	maxTurn     int
-	startTime   time.Time
-	done        bool
-	success     bool
-	finalMsg    string
+	turn      int
+	maxTurn   int
+	startTime time.Time
+	done      bool
+	success   bool
+	finalMsg  string
 
 	// UI state
 	width       int
@@ -56,7 +56,7 @@ type Model struct {
 	queenScroll int // scroll offset for queen panel (from bottom)
 
 	// For tick
-	quitting    bool
+	quitting bool
 }
 
 type queenLine struct {

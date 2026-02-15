@@ -33,11 +33,11 @@ type TaskUpdateMsg struct {
 
 // WorkerUpdateMsg is a worker status change.
 type WorkerUpdateMsg struct {
-	ID       string
-	TaskID   string
-	Status   string // "running", "idle", "done", "failed"
-	Adapter  string
-	Elapsed  time.Duration
+	ID      string
+	TaskID  string
+	Status  string // "running", "idle", "done", "failed"
+	Adapter string
+	Elapsed time.Duration
 }
 
 // TurnMsg indicates a new agent turn.

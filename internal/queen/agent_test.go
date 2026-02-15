@@ -256,7 +256,7 @@ func TestCompactMessages(t *testing.T) {
 	var messages []llm.ToolMessage
 	// First: objective
 	messages = append(messages, llm.ToolMessage{
-		Role: "user",
+		Role:    "user",
 		Content: []llm.ContentBlock{{Type: "text", Text: "Build a thing"}},
 	})
 
@@ -265,7 +265,7 @@ func TestCompactMessages(t *testing.T) {
 		messages = append(messages, llm.ToolMessage{
 			Role: "assistant",
 			Content: []llm.ContentBlock{{
-				Type: "tool_use",
+				Type:     "tool_use",
 				ToolCall: &llm.ToolCall{ID: fmt.Sprintf("call-%d", i), Name: "get_status"},
 			}},
 		})

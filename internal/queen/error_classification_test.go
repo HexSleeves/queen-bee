@@ -34,11 +34,11 @@ func TestErrorClassification(t *testing.T) {
 	cfg := &config.Config{
 		ProjectDir: tempDir,
 		Queen: config.QueenConfig{
-			Model:          "test-model",
-			Provider:       "test",
-			MaxIterations:  10,
-			PlanTimeout:    5 * time.Minute,
-			ReviewTimeout:  5 * time.Minute,
+			Model:         "test-model",
+			Provider:      "test",
+			MaxIterations: 10,
+			PlanTimeout:   5 * time.Minute,
+			ReviewTimeout: 5 * time.Minute,
 		},
 		Workers: config.WorkerConfig{
 			MaxParallel:    2,

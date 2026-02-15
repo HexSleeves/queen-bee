@@ -22,10 +22,10 @@ type GeminiClient struct {
 // Gemini API types
 
 type geminiRequest struct {
-	Contents         []geminiContent       `json:"contents"`
-	Tools            []geminiTool          `json:"tools,omitempty"`
-	SystemInstruction *geminiContent       `json:"systemInstruction,omitempty"`
-	GenerationConfig *geminiGenConfig      `json:"generationConfig,omitempty"`
+	Contents          []geminiContent  `json:"contents"`
+	Tools             []geminiTool     `json:"tools,omitempty"`
+	SystemInstruction *geminiContent   `json:"systemInstruction,omitempty"`
+	GenerationConfig  *geminiGenConfig `json:"generationConfig,omitempty"`
 }
 
 type geminiContent struct {
@@ -34,9 +34,9 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
-	Text             string                 `json:"text,omitempty"`
-	FunctionCall     *geminiFunctionCall    `json:"functionCall,omitempty"`
-	FunctionResponse *geminiFunctionResp    `json:"functionResponse,omitempty"`
+	Text             string              `json:"text,omitempty"`
+	FunctionCall     *geminiFunctionCall `json:"functionCall,omitempty"`
+	FunctionResponse *geminiFunctionResp `json:"functionResponse,omitempty"`
 }
 
 type geminiFunctionCall struct {

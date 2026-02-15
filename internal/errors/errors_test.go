@@ -145,11 +145,11 @@ func TestNewPermanentError(t *testing.T) {
 // TestRecoverPanic tests panic recovery
 func TestRecoverPanic(t *testing.T) {
 	tests := []struct {
-		name           string
-		panicValue     interface{}
-		shouldRecover  bool
-		expectedMsg    string
-		expectedType   ErrorType
+		name          string
+		panicValue    interface{}
+		shouldRecover bool
+		expectedMsg   string
+		expectedType  ErrorType
 	}{
 		{"no panic", nil, false, "", ""},
 		{"panic with error", errors.New("runtime error"), true, "panic: runtime error", ErrorTypePanic},
@@ -221,9 +221,9 @@ func TestCalculateBackoff(t *testing.T) {
 		{"2 retries", 2 * time.Second, 2, 60 * time.Second, 8 * time.Second},
 		{"3 retries", 2 * time.Second, 3, 60 * time.Second, 16 * time.Second},
 		{"4 retries", 2 * time.Second, 4, 60 * time.Second, 32 * time.Second},
-		{"5 retries", 2 * time.Second, 5, 60 * time.Second, 60 * time.Second}, // Capped at max
+		{"5 retries", 2 * time.Second, 5, 60 * time.Second, 60 * time.Second},        // Capped at max
 		{"negative retries", 2 * time.Second, -1, 60 * time.Second, 2 * time.Second}, // Treat as 0
-		{"no max", 2 * time.Second, 10, 0, 2048 * time.Second}, // No cap
+		{"no max", 2 * time.Second, 10, 0, 2048 * time.Second},                       // No cap
 	}
 
 	for _, tt := range tests {
@@ -247,7 +247,7 @@ func TestCalculateBackoffWithJitter(t *testing.T) {
 	// Run multiple times to account for randomness
 	for i := 0; i < 10; i++ {
 		result := CalculateBackoffWithJitter(baseDelay, retryCount, maxDelay, jitterPercent)
-		expectedBase := 8 * time.Second // 2 * 2^2
+		expectedBase := 8 * time.Second                            // 2 * 2^2
 		minExpected := time.Duration(float64(expectedBase) * 0.95) // -5% due to jitter
 
 		if result < minExpected || result > expectedBase {
@@ -311,7 +311,7 @@ func TestErrorTypeFromString(t *testing.T) {
 // TestErrorWrapping tests that errors can be properly unwrapped
 func TestErrorWrapping(t *testing.T) {
 	inner := errors.New("root cause")
-	
+
 	// Test RetryableError wrapping
 	retryable := &RetryableError{Err: inner, Kind: "network"}
 	if !errors.Is(retryable, inner) {

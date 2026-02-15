@@ -397,9 +397,9 @@ func TestHandlerType(t *testing.T) {
 // TestPanicRecovery tests that a panicking handler does not crash Publish()
 func TestPanicRecovery(t *testing.T) {
 	tests := []struct {
-		name        string
-		panicType   string
-		panicValue  interface{}
+		name       string
+		panicType  string
+		panicValue interface{}
 	}{
 		{
 			name:       "panic with string",
@@ -456,9 +456,9 @@ func TestPanicRecovery(t *testing.T) {
 // after one handler panics
 func TestPanicRecoverySubsequentHandlers(t *testing.T) {
 	tests := []struct {
-		name           string
-		panicIndex     int
-		handlerCount   int
+		name         string
+		panicIndex   int
+		handlerCount int
 	}{
 		{
 			name:         "panic in first handler",

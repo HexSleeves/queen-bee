@@ -36,11 +36,11 @@ func TestResumeContinuesInterruptedSession(t *testing.T) {
 		ProjectDir: tempDir,
 		HiveDir:    ".hive",
 		Queen: config.QueenConfig{
-			Model:          "test-model",
-			Provider:       "test",
-			MaxIterations:  10,
-			PlanTimeout:    5 * time.Minute,
-			ReviewTimeout:  5 * time.Minute,
+			Model:         "test-model",
+			Provider:      "test",
+			MaxIterations: 10,
+			PlanTimeout:   5 * time.Minute,
+			ReviewTimeout: 5 * time.Minute,
 		},
 		Workers: config.WorkerConfig{
 			MaxParallel:    2,
