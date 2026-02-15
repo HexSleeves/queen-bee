@@ -62,7 +62,11 @@ The structured Plan → Delegate → Monitor → Review → Replan loop. The Que
 | Package | File(s) | Purpose |
 |---------|---------|--------|
 | `cmd/waggle` | `main.go`, `app.go`, `commands.go`, `status.go`, `tasks.go` | CLI entry point (urfave/cli): `run`, `init`, `status`, `config`, `resume` |
-| `internal/queen` | `queen.go` | **Core orchestrator** — legacy Plan/Delegate/Monitor/Review/Replan loop |
+| `internal/queen` | `queen.go` | **Core orchestrator** — main loop, initialization, logging |
+| `internal/queen` | `delegate.go` | Legacy delegation phase — assigns ready tasks to workers |
+| `internal/queen` | `planner.go` | Legacy planning phase — LLM-backed task decomposition + parsing |
+| `internal/queen` | `failure.go` | Task failure handling with error classification + retry backoff |
+| `internal/queen` | `reporter.go` | Completion reporting — task result formatting + summary |
 | `internal/queen` | `agent.go` | **Agent mode** — autonomous tool-using LLM loop with conversation history |
 | `internal/queen` | `tools.go` | Tool definitions + handlers (create_tasks, assign_task, wait, approve, etc.) |
 | `internal/queen` | `prompt.go` | System prompt builder for agent mode |
@@ -87,7 +91,7 @@ The structured Plan → Delegate → Monitor → Review → Replan loop. The Que
 | `internal/compact` | `compact.go` | Context window management, token estimation, summarization |
 | `internal/errors` | `errors.go` | Error classification, retry/permanent types, backoff |
 
-**Total: ~10200 lines of source + ~7500 lines of tests across 17,600+ total Go lines (54 commits)**
+**Total: ~9600 lines of source + ~12200 lines of tests across 21,800 total Go lines (62 commits)**
 
 ## Key Interfaces
 
@@ -338,6 +342,7 @@ just run-interactive # Launch TUI prompt
 ## Repository
 
 - GitHub: <https://github.com/HexSleeves/waggle>
-- 54 commits on `main`
+- 62 commits on `main`
 - Build: `just build` / `just ci`
-- No CI pipeline yet, no releases
+- CI: GitHub Actions (fmt-check + vet + test + build on push/PR)
+- No releases yet
