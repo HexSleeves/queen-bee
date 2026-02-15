@@ -119,6 +119,11 @@ func ClassifyError(err error) ErrorType {
 		"resource temporarily unavailable",
 		"try again",
 		"busy",
+		// Panic/runtime errors (often transient - nil pointer from race conditions, etc.)
+		"panic:",
+		"runtime error",
+		"index out of range",
+		"nil pointer",
 	}
 
 	for _, pattern := range retryablePatterns {
@@ -149,11 +154,6 @@ func ClassifyError(err error) ErrorType {
 		"forbidden",
 		"401",
 		"403",
-		// Logic errors
-		"panic:",
-		"runtime error",
-		"index out of range",
-		"nil pointer",
 	}
 
 	for _, pattern := range permanentPatterns {
