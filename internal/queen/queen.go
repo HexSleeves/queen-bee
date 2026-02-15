@@ -330,7 +330,14 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 			q.router.SetRoute(tt, defaultAdapter)
 		}
 	}
-	q.logger.Printf("✓ Available adapters: %v", available)
+	// Show available adapters (exclude 'exec' unless it's the default)
+	displayAdapters := make([]string, 0, len(available))
+	for _, name := range available {
+		if name != "exec" || defaultAdapter == "exec" {
+			displayAdapters = append(displayAdapters, name)
+		}
+	}
+	q.logger.Printf("✓ Available adapters: %v", displayAdapters)
 
 	// Create DB session
 	q.sessionID = fmt.Sprintf("session-%d", time.Now().UnixNano())

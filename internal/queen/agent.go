@@ -37,7 +37,14 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 	if a, ok := q.registry.Get(defaultAdapter); !ok || !a.Available() {
 		q.logger.Printf("⚠ Default adapter %q not available, falling back to: %s", defaultAdapter, available[0])
 	}
-	q.logger.Printf("✓ Using adapter: %s | Available: %v", defaultAdapter, available)
+	// Filter exec from display unless it's the chosen adapter
+	displayAdapters := make([]string, 0, len(available))
+	for _, name := range available {
+		if name != "exec" || defaultAdapter == "exec" {
+			displayAdapters = append(displayAdapters, name)
+		}
+	}
+	q.logger.Printf("✓ Using adapter: %s | Available: %v", defaultAdapter, displayAdapters)
 
 	// Create DB session
 	q.sessionID = fmt.Sprintf("session-%d", time.Now().UnixNano())

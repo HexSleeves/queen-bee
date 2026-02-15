@@ -111,6 +111,9 @@ func runObjective(ctx context.Context, cmd *cli.Command, objective string) error
 	fmt.Printf("  Objective: %s\n", objective)
 	fmt.Printf("  Adapter:   %s\n", cfg.Workers.DefaultAdapter)
 	fmt.Printf("  Workers:   %d max parallel\n", cfg.Workers.MaxParallel)
+	if cfg.Queen.Provider != "" {
+		fmt.Printf("  Queen LLM: %s (%s)\n", cfg.Queen.Provider, cfg.Queen.Model)
+	}
 	fmt.Println("")
 
 	q, err := queen.New(cfg, logger)
@@ -152,7 +155,14 @@ func runObjective(ctx context.Context, cmd *cli.Command, objective string) error
 		if forceLegacy {
 			logger.Println("⚙ Legacy mode (--legacy flag)")
 		} else {
-			logger.Println("⚙ Legacy mode (LLM provider does not support tools)")
+			provider := cfg.Queen.Provider
+			if provider == "" {
+				logger.Println("⚙ Legacy mode (no queen.provider configured)")
+				logger.Println("  💡 Set queen.provider to \"anthropic\" in waggle.json for agent mode")
+			} else {
+				logger.Printf("⚙ Legacy mode (provider %q is CLI-based, no tool support)", provider)
+				logger.Println("  💡 For agent mode, set queen.provider to \"anthropic\" (requires ANTHROPIC_API_KEY)")
+			}
 		}
 		runErr = q.Run(runCtx, objective)
 	}
