@@ -215,28 +215,29 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	}
 
 	// Initialize adapter registry
+	maxOut := cfg.Workers.MaxOutputSize
 	registry := adapter.NewRegistry()
 	registry.Register(adapter.NewClaudeAdapter(
 		cfg.Adapters["claude-code"].Command,
 		cfg.Adapters["claude-code"].Args,
 		cfg.ProjectDir,
 		guard,
-	))
+	).WithMaxOutput(maxOut))
 	registry.Register(adapter.NewCodexAdapter(
 		cfg.Adapters["codex"].Command,
 		cfg.Adapters["codex"].Args,
 		cfg.ProjectDir,
 		guard,
-	))
+	).WithMaxOutput(maxOut))
 	registry.Register(adapter.NewOpenCodeAdapter(
 		cfg.Adapters["opencode"].Command,
 		cfg.Adapters["opencode"].Args,
 		cfg.ProjectDir,
 		guard,
-	))
+	).WithMaxOutput(maxOut))
 
 	// Register exec adapter (always available fallback)
-	registry.Register(adapter.NewExecAdapter(cfg.ProjectDir, guard))
+	registry.Register(adapter.NewExecAdapter(cfg.ProjectDir, guard).WithMaxOutput(maxOut))
 
 	// Register kimi adapter
 	registry.Register(adapter.NewKimiAdapter(
@@ -244,7 +245,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 		cfg.Adapters["kimi"].Args,
 		cfg.ProjectDir,
 		guard,
-	))
+	).WithMaxOutput(maxOut))
 
 	// Register gemini adapter
 	registry.Register(adapter.NewGeminiAdapter(
@@ -252,7 +253,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 		cfg.Adapters["gemini"].Args,
 		cfg.ProjectDir,
 		guard,
-	))
+	).WithMaxOutput(maxOut))
 
 	router := adapter.NewTaskRouter(registry, cfg.Workers.DefaultAdapter)
 

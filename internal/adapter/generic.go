@@ -29,27 +29,28 @@ const (
 
 // CLIAdapter is a generic adapter that wraps any CLI tool.
 type CLIAdapter struct {
-	name    string
-	command string
-	args    []string
-	workDir string
-	guard   *safety.Guard
-	mode    PromptMode
+	name          string
+	command       string
+	args          []string
+	workDir       string
+	guard         *safety.Guard
+	mode          PromptMode
+	maxOutputSize int
 }
 
 // CLIAdapterConfig holds the configuration for creating a CLIAdapter.
 type CLIAdapterConfig struct {
-	Name    string
-	Command string
-	Args    []string
-	WorkDir string
-	Guard   *safety.Guard
-	Mode    PromptMode
+	Name       string
+	Command    string
+	Args       []string
+	WorkDir    string
+	Guard      *safety.Guard
+	Mode       PromptMode
 	// FallbackPaths are checked if the command isn't on PATH.
 	FallbackPaths []string
-}
-
-// NewCLIAdapter creates a generic CLI adapter from config.
+	// MaxOutputSize caps worker output at this many bytes (0 = unlimited).
+	MaxOutputSize int
+}// NewCLIAdapter creates a generic CLI adapter from config.
 func NewCLIAdapter(cfg CLIAdapterConfig) *CLIAdapter {
 	command := cfg.Command
 	// Resolve command if not on PATH
@@ -62,13 +63,20 @@ func NewCLIAdapter(cfg CLIAdapterConfig) *CLIAdapter {
 		}
 	}
 	return &CLIAdapter{
-		name:    cfg.Name,
-		command: command,
-		args:    cfg.Args,
-		workDir: cfg.WorkDir,
-		guard:   cfg.Guard,
-		mode:    cfg.Mode,
+		name:          cfg.Name,
+		command:       command,
+		args:          cfg.Args,
+		workDir:       cfg.WorkDir,
+		guard:         cfg.Guard,
+		mode:          cfg.Mode,
+		maxOutputSize: cfg.MaxOutputSize,
 	}
+}
+
+// WithMaxOutput sets the maximum output size in bytes. Returns the adapter for chaining.
+func (a *CLIAdapter) WithMaxOutput(size int) *CLIAdapter {
+	a.maxOutputSize = size
+	return a
 }
 
 func (a *CLIAdapter) Name() string { return a.name }
@@ -154,7 +162,7 @@ func (w *CLIWorker) Spawn(ctx context.Context, t *task.Task) error {
 
 	// Stream output live to w.output for TUI display
 	var stdoutBuf, stderrBuf bytes.Buffer
-	stream := newStreamWriter(&w.mu, &w.output)
+	stream := newStreamWriter(&w.mu, &w.output, w.adapter.maxOutputSize)
 	w.cmd.Stdout = io.MultiWriter(&stdoutBuf, stream)
 	w.cmd.Stderr = io.MultiWriter(&stderrBuf, stream)
 

@@ -67,6 +67,7 @@ type WorkerConfig struct {
 	DefaultTimeout time.Duration `json:"default_timeout"`
 	MaxRetries     int           `json:"max_retries"`
 	DefaultAdapter string        `json:"default_adapter"`
+	MaxOutputSize  int           `json:"max_output_size"`
 }
 
 type AdapterConfig struct {
@@ -101,6 +102,7 @@ func DefaultConfig() *Config {
 			DefaultTimeout: 10 * time.Minute,
 			MaxRetries:     2,
 			DefaultAdapter: "claude-code",
+			MaxOutputSize:  1024 * 1024, // 1MB
 		},
 		Adapters: map[string]AdapterConfig{
 			"claude-code": {

@@ -25,20 +25,43 @@ func getExitCode(err error) int {
 	return -1
 }
 
+const truncationMarker = "\n\n[output truncated — exceeded max output size]\n"
+
 // streamWriter is a thread-safe io.Writer that appends to a strings.Builder.
 // It allows worker output to be read live via Output() while the process runs.
+// If maxSize > 0, output is capped and a truncation marker is appended.
 type streamWriter struct {
-	mu  *sync.Mutex
-	buf *strings.Builder
+	mu        *sync.Mutex
+	buf       *strings.Builder
+	maxSize   int
+	truncated bool
 }
 
-func newStreamWriter(mu *sync.Mutex, buf *strings.Builder) *streamWriter {
-	return &streamWriter{mu: mu, buf: buf}
+func newStreamWriter(mu *sync.Mutex, buf *strings.Builder, maxSize int) *streamWriter {
+	return &streamWriter{mu: mu, buf: buf, maxSize: maxSize}
 }
 
 func (sw *streamWriter) Write(p []byte) (int, error) {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
+
+	if sw.maxSize > 0 && sw.truncated {
+		// Already truncated — silently discard but report full length written
+		return len(p), nil
+	}
+
+	if sw.maxSize > 0 {
+		remaining := sw.maxSize - sw.buf.Len()
+		if len(p) > remaining {
+			if remaining > 0 {
+				sw.buf.Write(p[:remaining])
+			}
+			sw.buf.WriteString(truncationMarker)
+			sw.truncated = true
+			return len(p), nil
+		}
+	}
+
 	return sw.buf.Write(p)
 }
 
