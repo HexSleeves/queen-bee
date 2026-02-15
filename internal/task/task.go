@@ -99,6 +99,13 @@ func (g *TaskGraph) Add(t *Task) {
 	}
 }
 
+// Remove deletes a task from the graph by ID.
+func (g *TaskGraph) Remove(id string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.tasks, id)
+}
+
 func (g *TaskGraph) Get(id string) (*Task, bool) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
