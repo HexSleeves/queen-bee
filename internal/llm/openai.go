@@ -26,7 +26,7 @@ type openaiRequest struct {
 	Model       string             `json:"model"`
 	Messages    []openaiMessage    `json:"messages"`
 	Tools       []openaiTool       `json:"tools,omitempty"`
-	MaxTokens   int                `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int      `json:"max_completion_tokens,omitempty"`
 	Temperature *float64           `json:"temperature,omitempty"`
 }
 
@@ -119,7 +119,7 @@ func (c *OpenAIClient) ChatWithHistory(ctx context.Context, systemPrompt string,
 	reqBody := openaiRequest{
 		Model:     c.model,
 		Messages:  apiMessages,
-		MaxTokens: 4096,
+		MaxCompletionTokens: 4096,
 	}
 
 	resp, err := c.doRequest(ctx, reqBody)
@@ -214,7 +214,7 @@ func (c *OpenAIClient) ChatWithTools(ctx context.Context, systemPrompt string,
 		Model:     c.model,
 		Messages:  apiMessages,
 		Tools:     apiTools,
-		MaxTokens: 8192,
+		MaxCompletionTokens: 8192,
 	}
 
 	resp, err := c.doRequest(ctx, reqBody)
