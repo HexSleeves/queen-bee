@@ -41,7 +41,6 @@ type Queen struct {
 
 	cfg      *config.Config
 	bus      *bus.MessageBus
-	store    *state.Store
 	db       *state.DB
 	board    *blackboard.Blackboard
 	tasks    *task.TaskGraph
@@ -193,13 +192,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	// Initialize message bus
 	msgBus := bus.New(10000)
 
-	// Initialize state store
-	store, err := state.NewStore(cfg.HivePath())
-	if err != nil {
-		return nil, fmt.Errorf("init state store: %w", err)
-	}
-
-	// Initialize SQLite DB (additional persistence layer)
+	// Initialize SQLite DB
 	db, err := state.OpenDB(cfg.HivePath())
 	if err != nil {
 		return nil, fmt.Errorf("init state db: %w", err)
@@ -290,7 +283,6 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	q := &Queen{
 		cfg:         cfg,
 		bus:         msgBus,
-		store:       store,
 		db:          db,
 		board:       board,
 		tasks:       tasks,
@@ -304,9 +296,8 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 		assignments: make(map[string]string),
 	}
 
-	// Wire up event logging
+	// Wire up event logging to SQLite
 	msgBus.SubscribeAll(func(msg bus.Message) {
-		store.Append(string(msg.Type), msg)
 		if sid := q.sessionID; sid != "" {
 			q.db.AppendEvent(sid, string(msg.Type), msg)
 		}
@@ -346,10 +337,6 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 	if err := q.db.CreateSession(q.sessionID, objective); err != nil {
 		q.logger.Printf("⚠ DB: failed to create session: %v", err)
 	}
-
-	q.store.Append("queen.start", map[string]string{
-		"objective": objective,
-	})
 
 	for q.iteration = 0; q.iteration < q.cfg.Queen.MaxIterations; q.iteration++ {
 		select {
@@ -411,7 +398,6 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 
 		case PhaseDone:
 			q.logger.Println("✅ All tasks complete!")
-			q.store.Append("queen.done", q.buildSummary())
 			q.db.UpdateSessionStatus(q.sessionID, "done")
 			q.printReport()
 			return nil
@@ -531,11 +517,6 @@ func (q *Queen) plan(ctx context.Context) error {
 		q.logger.Printf("  📌 Task: [%s] %s", t.Type, t.Title)
 	}
 
-	q.store.Append("queen.plan", map[string]interface{}{
-		"task_count": len(tasks),
-		"tasks":      tasks,
-	})
-
 	q.ctx.Add("assistant", fmt.Sprintf("Plan created with %d tasks", len(tasks)))
 
 	return nil
@@ -593,12 +574,6 @@ func (q *Queen) delegate(ctx context.Context) error {
 		q.db.UpdateTaskWorker(q.sessionID, t.ID, bee.ID())
 
 		q.logger.Printf("  🐝 Assigned [%s] %s -> %s (%s)", t.Type, t.Title, bee.ID(), adapterName)
-
-		q.store.Append("queen.delegate", map[string]string{
-			"task_id":   t.ID,
-			"worker_id": bee.ID(),
-			"adapter":   adapterName,
-		})
 	}
 
 	return nil
@@ -827,38 +802,18 @@ func (q *Queen) handleTaskFailure(ctx context.Context, taskID, workerID string, 
 		q.logger.Printf("  🔄 Retrying task %s (attempt %d/%d) after %v backoff", taskID, t.RetryCount, t.MaxRetries, backoffDelay)
 
 		// Apply backoff by waiting before the task becomes ready again
-		// We track when the task can be retried
 		go func() {
 			time.Sleep(backoffDelay)
-			q.store.Append("queen.retry", map[string]interface{}{
-				"task_id":     taskID,
-				"retry_count": t.RetryCount,
-				"error":       errMsg,
-				"error_type":  string(errType),
-				"backoff_ms":  backoffDelay.Milliseconds(),
-			})
 		}()
 	} else if !isRetryable {
 		// Permanent error - fail immediately without wasting retries
 		q.logger.Printf("  💀 Task %s has permanent error, failing immediately", taskID)
 		q.tasks.UpdateStatus(taskID, task.StatusFailed)
 		q.db.UpdateTaskStatus(q.sessionID, taskID, "failed")
-		q.store.Append("queen.task_failed", map[string]interface{}{
-			"task_id":    taskID,
-			"error":      errMsg,
-			"error_type": string(errType),
-			"permanent":  true,
-		})
 	} else {
 		// Max retries exceeded
 		q.tasks.UpdateStatus(taskID, task.StatusFailed)
 		q.db.UpdateTaskStatus(q.sessionID, taskID, "failed")
-		q.store.Append("queen.task_failed", map[string]interface{}{
-			"task_id":     taskID,
-			"error":       errMsg,
-			"error_type":  string(errType),
-			"max_retries": true,
-		})
 	}
 }
 
@@ -874,10 +829,6 @@ func (q *Queen) handleFailure(ctx context.Context) error {
 		if q.lastErr != nil {
 			errMsg = q.lastErr.Error()
 		}
-		q.store.Append("queen.failed", map[string]interface{}{
-			"phase": "planning",
-			"error": errMsg,
-		})
 		return fmt.Errorf("queen failed during planning phase: %s", errMsg)
 	}
 
@@ -885,10 +836,6 @@ func (q *Queen) handleFailure(ctx context.Context) error {
 	for _, t := range failed {
 		errs = append(errs, fmt.Sprintf("[%s] %s", t.ID, t.Title))
 	}
-
-	q.store.Append("queen.failed", map[string]interface{}{
-		"failed_tasks": errs,
-	})
 
 	return fmt.Errorf("queen failed: %d tasks could not be completed: %s",
 		len(failed), strings.Join(errs, ", "))
@@ -1067,8 +1014,7 @@ func (q *Queen) Close() error {
 			}
 		}
 	}
-	q.db.Close()
-	return q.store.Close()
+	return q.db.Close()
 }
 
 // Status returns the current queen status for display

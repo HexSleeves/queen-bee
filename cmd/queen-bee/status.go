@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+
 func cmdStatus(ctx context.Context, cmd *cli.Command) error {
 	projectDir := cmd.String("project")
 	logger := log.New(os.Stderr, "", log.LstdFlags)
@@ -22,16 +23,9 @@ func cmdStatus(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	dbPath := filepath.Join(hiveDir, "hive.db")
-	logPath := filepath.Join(hiveDir, "log.jsonl")
 
-	// Try SQLite DB first; fall back to JSONL if DB doesn't exist
 	if _, err := os.Stat(dbPath); err == nil {
 		return cmdStatusDB(hiveDir)
-	}
-
-	// Fallback: parse JSONL (legacy sessions)
-	if _, err := os.Stat(logPath); err == nil {
-		return cmdStatusJSONL(logPath)
 	}
 
 	fmt.Println("Hive initialized but no sessions run yet.")
@@ -104,24 +98,6 @@ func cmdStatusDB(hiveDir string) error {
 		}
 		fmt.Println("")
 	}
-	return nil
-}
-
-// cmdStatusJSONL is the legacy fallback that parses log.jsonl.
-func cmdStatusJSONL(logPath string) error {
-	_, err := os.ReadFile(logPath)
-	if err != nil {
-		return fmt.Errorf("read log: %w", err)
-	}
-
-	// Parse events from JSONL (simplified - full implementation in original)
-	fmt.Println("")
-	fmt.Println("══════════════════════════════════════════════════")
-	fmt.Println("  Queen Bee — Session Status (legacy)")
-	fmt.Println("══════════════════════════════════════════════════")
-	fmt.Println("  Legacy JSONL format - limited info available")
-	fmt.Println("")
-
 	return nil
 }
 
