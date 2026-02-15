@@ -70,6 +70,11 @@ func (p *Program) SendDone(success bool, summary, errMsg string) {
 	p.Send(DoneMsg{Success: success, Summary: summary, Error: errMsg})
 }
 
+// SendWorkerOutput sends accumulated worker output to the TUI.
+func (p *Program) SendWorkerOutput(workerID, output string) {
+	p.Send(WorkerOutputMsg{WorkerID: workerID, Output: output})
+}
+
 // LogWriter returns an io.Writer that sends each line to the TUI as a LogMsg.
 // Use this as the output for log.New() to capture the Queen's logger output.
 func (p *Program) LogWriter() io.Writer {

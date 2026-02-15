@@ -9,11 +9,17 @@ import (
 )
 
 const (
-	maxQueenLines = 200
-	maxLogLines   = 100
-	tickInterval  = time.Second
+	maxQueenLines  = 200
+	maxLogLines    = 100
+	tickInterval   = time.Second
 )
 
+type viewMode int
+
+const (
+	viewQueen  viewMode = iota
+	viewWorker
+)
 // TaskInfo tracks task state for display.
 type TaskInfo struct {
 	ID       string
@@ -51,9 +57,15 @@ type Model struct {
 	finalMsg  string
 
 	// UI state
-	width       int
-	height      int
-	queenScroll int // scroll offset for queen panel (from bottom)
+	width         int
+	height        int
+	queenScroll   int // scroll offset for queen panel (from bottom)
+	viewMode      viewMode
+	viewWorkerID  string              // which worker we're viewing
+	workerOutputs map[string][]string // worker ID -> output lines
+	workerOrder   []string            // stable insertion-order list of worker IDs
+	workerScroll  int                 // scroll offset for worker view (from bottom)
+	workerTasks   map[string]string   // worker ID -> task title
 
 	// For tick
 	quitting bool
@@ -67,13 +79,15 @@ type queenLine struct {
 // New creates a new TUI model.
 func New(objective string, maxTurns int) Model {
 	return Model{
-		objective:  objective,
-		queenLines: []queenLine{},
-		tasks:      []TaskInfo{},
-		taskMap:    make(map[string]int),
-		workers:    make(map[string]*WorkerInfo),
-		maxTurn:    maxTurns,
-		startTime:  time.Now(),
+		objective:     objective,
+		queenLines:    []queenLine{},
+		tasks:         []TaskInfo{},
+		taskMap:       make(map[string]int),
+		workers:       make(map[string]*WorkerInfo),
+		maxTurn:       maxTurns,
+		startTime:     time.Now(),
+		workerOutputs: make(map[string][]string),
+		workerTasks:   make(map[string]string),
 	}
 }
 
@@ -96,15 +110,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "up", "k":
-			if m.queenScroll < len(m.queenLines)-1 {
-				m.queenScroll++
+			if m.viewMode == viewWorker {
+				lines := m.workerOutputs[m.viewWorkerID]
+				if m.workerScroll < len(lines)-1 {
+					m.workerScroll++
+				}
+			} else {
+				if m.queenScroll < len(m.queenLines)-1 {
+					m.queenScroll++
+				}
 			}
 		case "down", "j":
-			if m.queenScroll > 0 {
-				m.queenScroll--
+			if m.viewMode == viewWorker {
+				if m.workerScroll > 0 {
+					m.workerScroll--
+				}
+			} else {
+				if m.queenScroll > 0 {
+					m.queenScroll--
+				}
+			}
+		case "tab":
+			m.cycleView(1)
+		case "shift+tab":
+			m.cycleView(-1)
+		case "0":
+			m.viewMode = viewQueen
+			m.queenScroll = 0
+		case "right", "l":
+			if m.viewMode == viewWorker {
+				m.cycleView(1)
+			} else if len(m.workerOrder) > 0 {
+				m.viewMode = viewWorker
+				m.viewWorkerID = m.workerOrder[0]
+				m.workerScroll = 0
+			}
+		case "left", "h":
+			if m.viewMode == viewWorker {
+				m.cycleView(-1)
 			}
 		default:
-			// Any key quits after done
+			// Any other key quits after done
 			if m.done {
 				m.quitting = true
 				return m, tea.Quit
@@ -184,12 +230,70 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Keep ticking so the view stays rendered
 		return m, tickCmd()
 
+	case WorkerOutputMsg:
+		lines := strings.Split(msg.Output, "\n")
+		m.workerOutputs[msg.WorkerID] = lines
+		// Track insertion order
+		found := false
+		for _, id := range m.workerOrder {
+			if id == msg.WorkerID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.workerOrder = append(m.workerOrder, msg.WorkerID)
+		}
+		// Auto-scroll if viewing this worker
+		if m.viewMode == viewWorker && m.viewWorkerID == msg.WorkerID {
+			m.workerScroll = 0
+		}
+
 	case LogMsg:
 		m.addQueenLine(msg.Text, "info")
 		m.queenScroll = 0
 	}
 
 	return m, nil
+}
+
+func (m *Model) cycleView(direction int) {
+	if len(m.workerOrder) == 0 {
+		m.viewMode = viewQueen
+		return
+	}
+
+	if m.viewMode == viewQueen {
+		// Enter worker view
+		m.viewMode = viewWorker
+		if direction > 0 {
+			m.viewWorkerID = m.workerOrder[0]
+		} else {
+			m.viewWorkerID = m.workerOrder[len(m.workerOrder)-1]
+		}
+		m.workerScroll = 0
+		return
+	}
+
+	// Find current index
+	idx := -1
+	for i, id := range m.workerOrder {
+		if id == m.viewWorkerID {
+			idx = i
+			break
+		}
+	}
+
+	next := idx + direction
+	if next < 0 || next >= len(m.workerOrder) {
+		// Wrap back to queen
+		m.viewMode = viewQueen
+		m.queenScroll = 0
+		return
+	}
+
+	m.viewWorkerID = m.workerOrder[next]
+	m.workerScroll = 0
 }
 
 func (m *Model) addQueenLine(text, style string) {
@@ -229,5 +333,14 @@ func (m *Model) updateWorker(msg WorkerUpdateMsg) {
 		Status:  msg.Status,
 		Adapter: msg.Adapter,
 		Started: time.Now(),
+	}
+	// Track worker→task mapping for display
+	if msg.TaskID != "" {
+		// Look up task title
+		if idx, ok := m.taskMap[msg.TaskID]; ok && idx < len(m.tasks) {
+			m.workerTasks[msg.ID] = m.tasks[idx].Title
+		} else {
+			m.workerTasks[msg.ID] = msg.TaskID
+		}
 	}
 }

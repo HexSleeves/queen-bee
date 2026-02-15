@@ -40,11 +40,18 @@ func (m Model) View() string {
 
 	innerW := w - 2 // border eats 2 chars
 
-	queenPanel := m.renderQueenPanel(innerW, queenH)
+	var mainPanel string
+	switch m.viewMode {
+	case viewWorker:
+		mainPanel = m.renderWorkerOutputPanel(innerW, queenH)
+	default:
+		mainPanel = m.renderQueenPanel(innerW, queenH)
+	}
+
 	taskPanel := m.renderTaskPanel(innerW, taskH)
 	sbar := m.renderStatusBar(w)
 
-	return queenPanel + "\n" + taskPanel + "\n" + sbar
+	return mainPanel + "\n" + taskPanel + "\n" + sbar
 }
 
 func (m Model) renderQueenPanel(w, h int) string {
@@ -112,6 +119,76 @@ func (m Model) renderQueenPanel(w, h int) string {
 
 	content := title + "\n" + strings.Join(rendered, "\n")
 	return queenBorder.Width(w).Render(content)
+}
+
+func (m Model) renderWorkerOutputPanel(w, h int) string {
+	// Title with worker info
+	workerLabel := m.viewWorkerID
+	if len(workerLabel) > 20 {
+		workerLabel = "w-" + workerLabel[len(workerLabel)-8:]
+	}
+	title := titleStyle.Render("⚙ Worker " + workerLabel)
+
+	// Show task name if known
+	if taskTitle, ok := m.workerTasks[m.viewWorkerID]; ok && taskTitle != "" {
+		tt := taskTitle
+		if len(tt) > w/2 {
+			tt = tt[:w/2-1] + "…"
+		}
+		title += subtleStyle.Render("  " + tt)
+	}
+
+	// Worker index indicator
+	for i, id := range m.workerOrder {
+		if id == m.viewWorkerID {
+			title += subtleStyle.Render(fmt.Sprintf("  [%d/%d]", i+1, len(m.workerOrder)))
+			break
+		}
+	}
+
+	lines := m.workerOutputs[m.viewWorkerID]
+	totalLines := len(lines)
+	visibleH := h - 1 // title takes 1 line
+	if visibleH < 1 {
+		visibleH = 1
+	}
+
+	// Scroll indicator
+	if m.workerScroll > 0 {
+		title += subtleStyle.Render(fmt.Sprintf("  [↑%d more]", m.workerScroll))
+	}
+
+	// Compute visible window (from bottom)
+	end := totalLines - m.workerScroll
+	if end > totalLines {
+		end = totalLines
+	}
+	if end < 0 {
+		end = 0
+	}
+	start := end - visibleH
+	if start < 0 {
+		start = 0
+	}
+
+	var rendered []string
+	for _, line := range lines[start:end] {
+		wrapped := wrapText(line, w-2)
+		for _, wl := range wrapped {
+			rendered = append(rendered, workerOutputStyle.Render(wl))
+		}
+	}
+
+	// Trim to fit and pad
+	if len(rendered) > visibleH {
+		rendered = rendered[len(rendered)-visibleH:]
+	}
+	for len(rendered) < visibleH {
+		rendered = append(rendered, "")
+	}
+
+	content := title + "\n" + strings.Join(rendered, "\n")
+	return workerBorder.Width(w).Render(content)
 }
 
 func (m Model) renderTaskPanel(w, h int) string {
@@ -183,12 +260,23 @@ func (m Model) renderTaskPanel(w, h int) string {
 			worker = subtleStyle.Render(wid)
 		}
 
-		row := fmt.Sprintf("  %s %s  %s",
-			icon,
-			style.Render(fmt.Sprintf("%-*s", titleW, taskTitle)),
-			worker,
-		)
-		rows = append(rows, row)
+		// Highlight if we're viewing this task's worker
+		viewing := m.viewMode == viewWorker && t.WorkerID == m.viewWorkerID
+		if viewing {
+			row := fmt.Sprintf("▸ %s %s  %s",
+				icon,
+				lipgloss.NewStyle().Foreground(colorBlue).Bold(true).Render(fmt.Sprintf("%-*s", titleW, taskTitle)),
+				worker,
+			)
+			rows = append(rows, row)
+		} else {
+			row := fmt.Sprintf("  %s %s  %s",
+				icon,
+				style.Render(fmt.Sprintf("%-*s", titleW, taskTitle)),
+				worker,
+			)
+			rows = append(rows, row)
+		}
 	}
 
 	content := title + stats + "\n" + strings.Join(rows, "\n")
@@ -216,9 +304,19 @@ func (m Model) renderStatusBar(w int) string {
 		left = "🐝 " + obj
 	}
 
+	// Navigation hint
+	var navHint string
+	if len(m.workerOrder) > 0 {
+		if m.viewMode == viewWorker {
+			navHint = " · tab:next  0:queen"
+		} else {
+			navHint = " · tab:workers"
+		}
+	}
+
 	// Right: workers + time
 	workerCount := len(m.workers)
-	right := fmt.Sprintf("%d workers · %s", workerCount, elapsed)
+	right := fmt.Sprintf("%d workers · %s%s", workerCount, elapsed, navHint)
 
 	// Spacing
 	leftW := lipgloss.Width(left)

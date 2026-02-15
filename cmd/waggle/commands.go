@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/exedev/waggle/internal/bus"
 	"github.com/exedev/waggle/internal/config"
@@ -153,11 +154,23 @@ func runWithTUI(ctx context.Context, cfg *config.Config, objective, tasksFile st
 		})
 	})
 	q.Bus().Subscribe(bus.MsgWorkerCompleted, func(msg bus.Message) {
+		// Capture final output before worker is cleaned up
+		for wid, output := range q.ActiveWorkerOutputs() {
+			if output != "" {
+				tuiProg.SendWorkerOutput(wid, output)
+			}
+		}
 		tuiProg.Send(tui.WorkerUpdateMsg{
 			ID: msg.WorkerID, TaskID: msg.TaskID, Status: "done",
 		})
 	})
 	q.Bus().Subscribe(bus.MsgWorkerFailed, func(msg bus.Message) {
+		// Capture final output before worker is cleaned up
+		for wid, output := range q.ActiveWorkerOutputs() {
+			if output != "" {
+				tuiProg.SendWorkerOutput(wid, output)
+			}
+		}
 		tuiProg.Send(tui.WorkerUpdateMsg{
 			ID: msg.WorkerID, TaskID: msg.TaskID, Status: "failed",
 		})
@@ -176,6 +189,28 @@ func runWithTUI(ctx context.Context, cfg *config.Config, objective, tasksFile st
 	// Run the queen in a goroutine, TUI in the main thread
 	runCtx, cancel := context.WithCancel(ctx)
 	var runErr error
+
+	// Poll worker outputs periodically and send to TUI
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-runCtx.Done():
+				// Send final snapshot
+				for wid, output := range q.ActiveWorkerOutputs() {
+					tuiProg.SendWorkerOutput(wid, output)
+				}
+				return
+			case <-ticker.C:
+				for wid, output := range q.ActiveWorkerOutputs() {
+					if output != "" {
+						tuiProg.SendWorkerOutput(wid, output)
+					}
+				}
+			}
+		}
+	}()
 
 	go func() {
 		defer cancel()

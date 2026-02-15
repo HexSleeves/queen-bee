@@ -1042,6 +1042,20 @@ func (q *Queen) Bus() *bus.MessageBus {
 	return q.bus
 }
 
+// ActiveWorkerOutputs returns the current output of all workers in the pool.
+// Returns a map of workerID -> output string.
+func (q *Queen) ActiveWorkerOutputs() map[string]string {
+	results := make(map[string]string)
+	q.mu.RLock()
+	for workerID := range q.assignments {
+		if bee, ok := q.pool.Get(workerID); ok {
+			results[workerID] = bee.Output()
+		}
+	}
+	q.mu.RUnlock()
+	return results
+}
+
 // Status returns the current queen status for display
 func (q *Queen) Status() map[string]interface{} {
 	q.mu.RLock()

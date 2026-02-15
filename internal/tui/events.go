@@ -60,3 +60,9 @@ type TickMsg struct{}
 type LogMsg struct {
 	Text string
 }
+
+// WorkerOutputMsg carries accumulated output for a worker.
+type WorkerOutputMsg struct {
+	WorkerID string
+	Output   string
+}

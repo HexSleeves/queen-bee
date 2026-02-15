@@ -62,6 +62,9 @@ var (
 	successStyle = lipgloss.NewStyle().
 			Foreground(colorGreen)
 
+	workerOutputStyle = lipgloss.NewStyle().
+			Foreground(colorWhite)
+
 	// Task status styles
 	statusStyles = map[string]lipgloss.Style{
 		"pending":  lipgloss.NewStyle().Foreground(colorSubtle),
