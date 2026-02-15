@@ -370,7 +370,7 @@ func setupTestQueen(t *testing.T) *Queen {
 	guard, _ := safety.NewGuard(cfg.Safety, tmpDir)
 	registry := adapter.NewRegistry()
 	registry.Register(adapter.NewExecAdapter(tmpDir, guard))
-	router := adapter.NewTaskRouter(registry)
+	router := adapter.NewTaskRouter(registry, cfg.Workers.DefaultAdapter)
 
 	logger := log.New(os.Stderr, "[TEST] ", log.LstdFlags)
 	ctxMgr := compact.NewContext(200000)

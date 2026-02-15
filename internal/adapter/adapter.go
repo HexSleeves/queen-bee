@@ -67,15 +67,18 @@ type TaskRouter struct {
 	routes   map[task.Type]string
 }
 
-func NewTaskRouter(reg *Registry) *TaskRouter {
+func NewTaskRouter(reg *Registry, defaultAdapter string) *TaskRouter {
+	if defaultAdapter == "" {
+		defaultAdapter = "claude-code"
+	}
 	return &TaskRouter{
 		registry: reg,
 		routes: map[task.Type]string{
-			task.TypeCode:     "claude-code",
-			task.TypeResearch: "claude-code",
-			task.TypeTest:     "claude-code",
-			task.TypeReview:   "claude-code",
-			task.TypeGeneric:  "claude-code",
+			task.TypeCode:     defaultAdapter,
+			task.TypeResearch: defaultAdapter,
+			task.TypeTest:     defaultAdapter,
+			task.TypeReview:   defaultAdapter,
+			task.TypeGeneric:  defaultAdapter,
 		},
 	}
 }

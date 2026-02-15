@@ -252,7 +252,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 		guard,
 	))
 
-	router := adapter.NewTaskRouter(registry)
+	router := adapter.NewTaskRouter(registry, cfg.Workers.DefaultAdapter)
 
 	// Initialize worker pool
 	pool := worker.NewPool(

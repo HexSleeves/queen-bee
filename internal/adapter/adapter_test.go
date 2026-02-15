@@ -51,7 +51,7 @@ func TestTaskRouter(t *testing.T) {
 	registry.Register(&MockAdapter{name: "claude-code"})
 	registry.Register(&MockAdapter{name: "codex"})
 
-	router := NewTaskRouter(registry)
+	router := NewTaskRouter(registry, "claude-code")
 
 	// Test default routing
 	codeTask := &task.Task{Type: task.TypeCode}
