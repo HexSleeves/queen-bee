@@ -238,9 +238,16 @@ func TestReviewApprovesSuccessfulTask(t *testing.T) {
 	})
 
 	// Delegate, wait, monitor
-	q.delegate(context.Background())
+	err := q.delegate(context.Background())
+	if err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+
 	time.Sleep(500 * time.Millisecond)
-	q.monitor(context.Background())
+	err = q.monitor(context.Background())
+	if err != nil {
+		t.Fatalf("monitor: %v", err)
+	}
 
 	// Review should mark it complete
 	done, err := q.review(context.Background())
@@ -272,9 +279,15 @@ func TestReviewHandlesFailedTask(t *testing.T) {
 		Timeout:    10 * time.Second,
 	})
 
-	q.delegate(context.Background())
+	err := q.delegate(context.Background())
+	if err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
 	time.Sleep(500 * time.Millisecond)
-	q.monitor(context.Background())
+	err = q.monitor(context.Background())
+	if err != nil {
+		t.Fatalf("monitor: %v", err)
+	}
 
 	// Review should handle the failure
 	done, err := q.review(context.Background())
