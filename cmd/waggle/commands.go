@@ -22,7 +22,7 @@ import (
 	"golang.org/x/term"
 )
 
-func loadConfigFromCtx(ctx context.Context, cmd *cli.Command) *config.Config {
+func loadConfigFromCtx(ctx context.Context, cmd *cli.Command) (*config.Config, error) {
 	configPath := cmd.String("config")
 	projectDir := cmd.String("project")
 	defaultAdapter := cmd.String("adapter")
@@ -30,7 +30,7 @@ func loadConfigFromCtx(ctx context.Context, cmd *cli.Command) *config.Config {
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		log.Fatalf("Load config: %v", err)
+		return nil, fmt.Errorf("load config: %w", err)
 	}
 
 	if projectDir != "." {
@@ -48,7 +48,7 @@ func loadConfigFromCtx(ctx context.Context, cmd *cli.Command) *config.Config {
 	cfg.Output.JSON = cmd.Bool("json")
 	cfg.Output.Plain = cmd.Bool("plain")
 
-	return cfg
+	return cfg, nil
 }
 
 func cmdInit(ctx context.Context, cmd *cli.Command) error {
@@ -105,7 +105,10 @@ func cmdRun(ctx context.Context, cmd *cli.Command) error {
 }
 
 func runObjective(ctx context.Context, cmd *cli.Command, objective string) error {
-	cfg := loadConfigFromCtx(ctx, cmd)
+	cfg, err := loadConfigFromCtx(ctx, cmd)
+	if err != nil {
+		return err
+	}
 	tasksFile := cmd.String("tasks")
 	forceLegacy := cmd.Bool("legacy")
 	forcePlain := cmd.Bool("plain")
@@ -375,6 +378,7 @@ func runPlain(ctx context.Context, cmd *cli.Command, cfg *config.Config, objecti
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigs)
 	go func() {
 		<-sigs
 		logger.Println("\nReceived shutdown signal, gracefully stopping...")
@@ -512,6 +516,7 @@ func runJSON(ctx context.Context, cmd *cli.Command, cfg *config.Config, objectiv
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigs)
 	go func() {
 		<-sigs
 		logger.Println("\nReceived shutdown signal, gracefully stopping...")
@@ -603,7 +608,10 @@ func runJSON(ctx context.Context, cmd *cli.Command, cfg *config.Config, objectiv
 }
 
 func cmdResume(ctx context.Context, cmd *cli.Command) error {
-	cfg := loadConfigFromCtx(ctx, cmd)
+	cfg, err := loadConfigFromCtx(ctx, cmd)
+	if err != nil {
+		return err
+	}
 	projectDir := cmd.String("project")
 	forcePlain := cmd.Bool("plain")
 	forceLegacy := cmd.Bool("legacy")
@@ -725,6 +733,7 @@ func runResumePlain(ctx context.Context, cmd *cli.Command, cfg *config.Config, s
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigs)
 
 	go func() {
 		<-sigs

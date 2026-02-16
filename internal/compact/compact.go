@@ -3,6 +3,7 @@ package compact
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,8 +15,10 @@ type Message struct {
 	TokenEst  int       `json:"token_est"`
 }
 
-// Context manages the Queen's conversation context with compaction
+// Context manages the Queen's conversation context with compaction.
+// All methods are safe for concurrent use.
 type Context struct {
+	mu               sync.Mutex
 	messages         []Message
 	compacted        []string // Summaries of compacted segments
 	maxTokens        int
@@ -34,6 +37,8 @@ func NewContext(maxTokens int) *Context {
 
 // Add appends a message and triggers compaction if needed
 func (c *Context) Add(role, content string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	tokens := EstimateTokens(content)
 	msg := Message{
 		Role:      role,
@@ -47,12 +52,16 @@ func (c *Context) Add(role, content string) {
 
 // NeedsCompaction returns true if context is approaching capacity
 func (c *Context) NeedsCompaction() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return float64(c.currentTokens) > float64(c.maxTokens)*c.compactThreshold
 }
 
 // Compact compresses older messages into a summary, keeping recent ones.
 // The summarizer function is injected — it could call an LLM or use a simple heuristic.
 func (c *Context) Compact(summarizer func(messages []Message) (string, error)) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if len(c.messages) < 4 {
 		return nil
 	}
@@ -76,6 +85,8 @@ func (c *Context) Compact(summarizer func(messages []Message) (string, error)) e
 
 // Build returns the full context as a message list, including compacted summaries
 func (c *Context) Build() []Message {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	var result []Message
 
 	if len(c.compacted) > 0 {
@@ -92,11 +103,15 @@ func (c *Context) Build() []Message {
 
 // Len returns the number of active (non-compacted) messages
 func (c *Context) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return len(c.messages)
 }
 
 // TokenCount returns the estimated token count
 func (c *Context) TokenCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.currentTokens
 }
 

@@ -551,7 +551,11 @@ type waitForWorkersInput struct {
 
 func handleWaitForWorkers(ctx context.Context, q *Queen, input json.RawMessage) (string, error) {
 	var in waitForWorkersInput
-	_ = json.Unmarshal(input, &in) // ignore error; all fields optional
+	if len(input) > 0 {
+		if err := json.Unmarshal(input, &in); err != nil {
+			return "", fmt.Errorf("invalid input: %w", err)
+		}
+	}
 
 	timeoutSec := in.TimeoutSeconds
 	if timeoutSec <= 0 {
@@ -822,7 +826,7 @@ func handleComplete(ctx context.Context, q *Queen, input json.RawMessage) (strin
 		return "", fmt.Errorf("summary is required")
 	}
 
-	q.phase = PhaseDone
+	q.setPhase(PhaseDone)
 	if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "done"); err != nil {
 		q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
 	}
@@ -845,7 +849,7 @@ func handleFail(ctx context.Context, q *Queen, input json.RawMessage) (string, e
 		return "", fmt.Errorf("reason is required")
 	}
 
-	q.phase = PhaseFailed
+	q.setPhase(PhaseFailed)
 	if err := q.db.UpdateSessionStatus(ctx, q.sessionID, "failed"); err != nil {
 		q.logger.Printf("⚠ Warning: failed to update session status: %v", err)
 	}

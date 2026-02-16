@@ -44,7 +44,8 @@ func NewGuard(cfg config.SafetyConfig, projectRoot string) (*Guard, error) {
 	}, nil
 }
 
-// CheckPath verifies a file path is within allowed boundaries
+// CheckPath verifies a file path is within allowed boundaries.
+// Symlinks are resolved to prevent escaping allowed directories.
 func (g *Guard) CheckPath(path string) error {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(g.projectRoot, path)
@@ -54,8 +55,23 @@ func (g *Guard) CheckPath(path string) error {
 		return fmt.Errorf("resolve path: %w", err)
 	}
 
+	// Resolve symlinks to prevent symlink-based escape from allowed dirs.
+	// If the path doesn't exist yet, resolve its parent directory.
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		// Path may not exist yet — resolve the parent
+		parent := filepath.Dir(abs)
+		resolvedParent, parentErr := filepath.EvalSymlinks(parent)
+		if parentErr != nil {
+			// Can't resolve at all — use the abs path as-is
+			resolved = abs
+		} else {
+			resolved = filepath.Join(resolvedParent, filepath.Base(abs))
+		}
+	}
+
 	for _, allowed := range g.resolvedPaths {
-		if strings.HasPrefix(abs, allowed) {
+		if strings.HasPrefix(resolved, allowed) {
 			return nil
 		}
 	}

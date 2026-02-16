@@ -211,6 +211,7 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	// Initialize safety guard
 	guard, err := safety.NewGuard(cfg.Safety, cfg.ProjectDir)
 	if err != nil {
+		db.Close()
 		return nil, fmt.Errorf("init safety guard: %w", err)
 	}
 
@@ -365,7 +366,7 @@ func (q *Queen) setupAdapters(ctx context.Context) error {
 
 // Run executes the Queen's main loop: Plan -> Delegate -> Monitor -> Review
 func (q *Queen) Run(ctx context.Context, objective string) error {
-	q.objective = objective
+	q.setObjective(objective)
 	q.logger.Printf("🐝 Waggle starting | Objective: %s", objective)
 
 	// Preflight: verify and configure adapters
@@ -379,7 +380,8 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 		q.logger.Printf("⚠ DB: failed to create session: %v", err)
 	}
 
-	for q.iteration = 0; q.iteration < q.cfg.Queen.MaxIterations; q.iteration++ {
+	for i := 0; i < q.cfg.Queen.MaxIterations; i++ {
+		q.setIteration(i)
 		select {
 		case <-ctx.Done():
 			q.logger.Println("⛔ Context cancelled, shutting down")
@@ -388,55 +390,59 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 		default:
 		}
 
-		q.logVerbose("\n━━━ Iteration %d | Phase: %s ━━━", q.iteration+1, q.phase)
+		q.mu.RLock()
+		curPhase := q.phase
+		curIter := q.iteration
+		q.mu.RUnlock()
+		q.logVerbose("\n━━━ Iteration %d | Phase: %s ━━━", curIter+1, curPhase)
 
-		switch q.phase {
+		switch curPhase {
 		case PhasePlan:
 			if err := q.plan(ctx); err != nil {
 				q.logger.Printf("❌ Plan failed: %v", err)
 				q.lastErr = err
-				q.phase = PhaseFailed
+				q.setPhase(PhaseFailed)
 				q.savePhase()
 				continue
 			}
-			q.phase = PhaseDelegate
+			q.setPhase(PhaseDelegate)
 			q.savePhase()
 
 		case PhaseDelegate:
 			if err := q.delegate(ctx); err != nil {
 				q.logger.Printf("❌ Delegate failed: %v", err)
-				q.phase = PhaseFailed
+				q.setPhase(PhaseFailed)
 				q.savePhase()
 				continue
 			}
-			q.phase = PhaseMonitor
+			q.setPhase(PhaseMonitor)
 			q.savePhase()
 
 		case PhaseMonitor:
 			if err := q.monitor(ctx); err != nil {
 				q.logger.Printf("❌ Monitor failed: %v", err)
-				q.phase = PhaseFailed
+				q.setPhase(PhaseFailed)
 				q.savePhase()
 				continue
 			}
-			q.phase = PhaseReview
+			q.setPhase(PhaseReview)
 			q.savePhase()
 
 		case PhaseReview:
 			done, err := q.review(ctx)
 			if err != nil {
 				q.logger.Printf("❌ Review failed: %v", err)
-				q.phase = PhaseFailed
+				q.setPhase(PhaseFailed)
 				q.savePhase()
 				continue
 			}
 			if done {
-				q.phase = PhaseDone
+				q.setPhase(PhaseDone)
 			} else if len(q.tasks.Ready()) > 0 {
 				// Tasks are already unblocked — skip planning, go straight to delegation
-				q.phase = PhaseDelegate
+				q.setPhase(PhaseDelegate)
 			} else {
-				q.phase = PhasePlan // Need LLM to create more tasks
+				q.setPhase(PhasePlan) // Need LLM to create more tasks
 			}
 			q.savePhase()
 
@@ -512,18 +518,18 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 
 				// Post result to blackboard
 				bbKey := fmt.Sprintf("result-%s", taskID)
-				var tagsStr string
+				tags := []string{"result"}
 				if t != nil {
-					tagsStr = strings.Join([]string{"result", string(t.Type)}, ",")
+					tags = append(tags, string(t.Type))
 				}
 				q.board.Post(&blackboard.Entry{
 					Key:      bbKey,
 					Value:    result.Output,
 					PostedBy: workerID,
 					TaskID:   taskID,
-					Tags:     []string{"result", string(t.Type)},
+					Tags:     tags,
 				})
-				err = q.db.PostBlackboard(ctx, q.sessionID, bbKey, result.Output, workerID, taskID, tagsStr)
+				err = q.db.PostBlackboard(ctx, q.sessionID, bbKey, result.Output, workerID, taskID, strings.Join(tags, ","))
 				if err != nil {
 					q.logger.Printf("⚠ Warning: failed to post blackboard entry %s: %v", bbKey, err)
 				}
@@ -571,11 +577,11 @@ func (q *Queen) review(ctx context.Context) (bool, error) {
 
 				// Show output immediately so user sees findings in real-time (unless suppressed)
 				if t != nil && result.Output != "" && !q.suppressReport {
-					fmt.Printf("\n  ┌─ [%s] %s\n", t.Type, t.Title)
+					q.logger.Printf("\n  ┌─ [%s] %s", t.Type, t.Title)
 					for _, line := range strings.Split(strings.TrimSpace(result.Output), "\n") {
-						fmt.Printf("  │ %s\n", line)
+						q.logger.Printf("  │ %s", line)
 					}
-					fmt.Println("  └─")
+					q.logger.Printf("  └─")
 				}
 
 				q.ctx.Add("assistant", fmt.Sprintf("Task %s completed: %s", taskID, truncate(result.Output, 500)))
@@ -665,10 +671,35 @@ func (q *Queen) persistNewTask(ctx context.Context, t *task.Task) {
 	}
 }
 
+// setPhase sets q.phase under the write lock.
+func (q *Queen) setPhase(p Phase) {
+	q.mu.Lock()
+	q.phase = p
+	q.mu.Unlock()
+}
+
+// setObjective sets q.objective under the write lock.
+func (q *Queen) setObjective(obj string) {
+	q.mu.Lock()
+	q.objective = obj
+	q.mu.Unlock()
+}
+
+// setIteration sets q.iteration under the write lock.
+func (q *Queen) setIteration(i int) {
+	q.mu.Lock()
+	q.iteration = i
+	q.mu.Unlock()
+}
+
 // savePhase saves the current phase and iteration to the database for resumption.
 func (q *Queen) savePhase() {
 	if q.sessionID != "" {
-		if err := q.db.UpdateSessionPhase(context.Background(), q.sessionID, string(q.phase), q.iteration); err != nil {
+		q.mu.RLock()
+		phase := string(q.phase)
+		iter := q.iteration
+		q.mu.RUnlock()
+		if err := q.db.UpdateSessionPhase(context.Background(), q.sessionID, phase, iter); err != nil {
 			q.logger.Printf("⚠ Warning: failed to save session phase: %v", err)
 		}
 	}

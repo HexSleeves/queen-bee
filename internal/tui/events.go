@@ -1,7 +1,5 @@
 package tui
 
-import "time"
-
 // TUI event types — sent from the Queen/workers to the TUI via tea.Program.Send()
 
 // QueenThinkingMsg is the Queen's text output (her reasoning).
@@ -33,11 +31,9 @@ type TaskUpdateMsg struct {
 
 // WorkerUpdateMsg is a worker status change.
 type WorkerUpdateMsg struct {
-	ID      string
-	TaskID  string
-	Status  string // "running", "idle", "done", "failed"
-	Adapter string
-	Elapsed time.Duration
+	ID     string
+	TaskID string
+	Status string // "running", "idle", "done", "failed"
 }
 
 // TurnMsg indicates a new agent turn.
@@ -65,9 +61,4 @@ type LogMsg struct {
 type WorkerOutputMsg struct {
 	WorkerID string
 	Output   string
-}
-
-// ObjectiveSubmittedMsg is sent when the user submits an objective in interactive mode.
-type ObjectiveSubmittedMsg struct {
-	Objective string
 }

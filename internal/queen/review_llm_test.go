@@ -41,39 +41,6 @@ func TestParseReviewVerdict_MarkdownFences(t *testing.T) {
 	}
 }
 
-func TestParseReviewVerdict_WithNewTasks(t *testing.T) {
-	input := `{
-		"approved": true,
-		"reason": "implementation is correct",
-		"suggestions": [],
-		"new_tasks": [
-			{
-				"type": "test",
-				"title": "Add integration tests",
-				"description": "Cover edge cases",
-				"depends_on": ["task-1"]
-			}
-		]
-	}`
-	v, err := parseReviewVerdict(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(v.NewTasks) != 1 {
-		t.Fatalf("expected 1 new task, got %d", len(v.NewTasks))
-	}
-	nt := v.NewTasks[0]
-	if nt.Type != "test" {
-		t.Errorf("type=%q, want %q", nt.Type, "test")
-	}
-	if nt.Title != "Add integration tests" {
-		t.Errorf("title=%q", nt.Title)
-	}
-	if len(nt.DependsOn) != 1 || nt.DependsOn[0] != "task-1" {
-		t.Errorf("depends_on=%v", nt.DependsOn)
-	}
-}
-
 func TestParseReviewVerdict_SurroundingText(t *testing.T) {
 	input := "Sure, here is my verdict:\n" +
 		`{"approved":true,"reason":"all good"}` +

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 func (m Model) View() string {
@@ -398,7 +399,8 @@ func (m Model) renderStatusBar(w int) string {
 	return statusBar.Width(w - 2).Render(bar)
 }
 
-// wrapText wraps a string to fit within maxWidth, splitting on word boundaries.
+// wrapText wraps a string to fit within maxWidth display columns,
+// correctly handling emoji and CJK characters.
 func wrapText(text string, maxWidth int) []string {
 	if maxWidth <= 0 {
 		maxWidth = 80
@@ -406,15 +408,31 @@ func wrapText(text string, maxWidth int) []string {
 	if len(text) == 0 {
 		return []string{""}
 	}
-	if len(text) <= maxWidth {
+	if runewidth.StringWidth(text) <= maxWidth {
 		return []string{text}
 	}
 
 	var lines []string
-	for len(text) > maxWidth {
-		// Find last space before maxWidth
-		cut := maxWidth
-		if idx := strings.LastIndex(text[:maxWidth], " "); idx > maxWidth/3 {
+	for runewidth.StringWidth(text) > maxWidth {
+		// Find the byte offset that fits within maxWidth display columns
+		colW := 0
+		byteOff := 0
+		for i, r := range text {
+			rw := runewidth.RuneWidth(r)
+			if colW+rw > maxWidth {
+				break
+			}
+			colW += rw
+			byteOff = i + len(string(r))
+		}
+		if byteOff == 0 {
+			// Single character wider than maxWidth — force advance
+			_, size := []rune(text)[0], len(string([]rune(text)[0]))
+			byteOff = size
+		}
+		// Try to break on a space within the last third
+		cut := byteOff
+		if idx := strings.LastIndex(text[:byteOff], " "); idx > byteOff/3 {
 			cut = idx
 		}
 		lines = append(lines, text[:cut])

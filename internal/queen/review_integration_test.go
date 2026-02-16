@@ -378,56 +378,6 @@ func TestReviewWithLLM_RejectedVerdict(t *testing.T) {
 	}
 }
 
-func TestReviewWithLLM_WithNewTasks(t *testing.T) {
-	mockClient := &mockReviewClient{
-		response: `{
-			"approved": true,
-			"reason": "Implementation is correct",
-			"suggestions": [],
-			"new_tasks": [
-				{"type": "test", "title": "Add tests", "description": "Write unit tests for the new code", "depends_on": ["t1"]},
-				{"type": "review", "title": "Code review", "description": "Review the implementation", "depends_on": ["t1", "t2"]}
-			]
-		}`,
-	}
-	q := reviewTestQueen(t, mockClient)
-
-	tk := &task.Task{
-		ID:          "t1",
-		Type:        task.TypeCode,
-		Title:       "Implement feature",
-		Description: "Write the feature",
-	}
-	result := &task.Result{Success: true, Output: "done"}
-
-	verdict, err := q.reviewWithLLM(context.Background(), "t1", tk, result)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(verdict.NewTasks) != 2 {
-		t.Fatalf("expected 2 new tasks, got %d", len(verdict.NewTasks))
-	}
-
-	nt0 := verdict.NewTasks[0]
-	if nt0.Type != "test" {
-		t.Errorf("expected type 'test', got %s", nt0.Type)
-	}
-	if nt0.Title != "Add tests" {
-		t.Errorf("expected title 'Add tests', got %s", nt0.Title)
-	}
-	if len(nt0.DependsOn) != 1 || nt0.DependsOn[0] != "t1" {
-		t.Errorf("unexpected depends_on: %v", nt0.DependsOn)
-	}
-
-	nt1 := verdict.NewTasks[1]
-	if nt1.Type != "review" {
-		t.Errorf("expected type 'review', got %s", nt1.Type)
-	}
-	if len(nt1.DependsOn) != 2 {
-		t.Errorf("expected 2 depends_on, got %d", len(nt1.DependsOn))
-	}
-}
-
 func TestReviewWithLLM_WithErrors(t *testing.T) {
 	mockClient := &mockReviewClient{
 		response: `{"approved": false, "reason": "Worker produced errors", "suggestions": ["Fix compilation errors"]}`,
@@ -651,49 +601,5 @@ func TestIntegration_ReviewAndReject(t *testing.T) {
 	}
 	if t1.RetryCount != 1 {
 		t.Errorf("expected retry count 1, got %d", t1.RetryCount)
-	}
-}
-
-func TestIntegration_ReviewWithNewTasks(t *testing.T) {
-	mockClient := &mockReviewClient{
-		response: `{
-			"approved": true,
-			"reason": "Implementation complete",
-			"suggestions": [],
-			"new_tasks": [
-				{"type": "test", "title": "Test the feature", "description": "Write tests", "depends_on": ["t1"]}
-			]
-		}`,
-	}
-	q := reviewTestQueen(t, mockClient)
-
-	tk := &task.Task{
-		ID:          "t1",
-		Type:        task.TypeCode,
-		Title:       "Implement feature",
-		Description: "Write the feature",
-		Status:      task.StatusComplete,
-		Result:      &task.Result{Success: true, Output: "done"},
-	}
-	q.tasks.Add(tk)
-
-	verdict, err := q.reviewWithLLM(context.Background(), "t1", tk, tk.Result)
-	if err != nil {
-		t.Fatalf("review error: %v", err)
-	}
-
-	if len(verdict.NewTasks) != 1 {
-		t.Fatalf("expected 1 new task, got %d", len(verdict.NewTasks))
-	}
-
-	newTask := verdict.NewTasks[0]
-	if newTask.Title != "Test the feature" {
-		t.Errorf("unexpected title: %s", newTask.Title)
-	}
-	if newTask.Type != "test" {
-		t.Errorf("unexpected type: %s", newTask.Type)
-	}
-	if len(newTask.DependsOn) != 1 || newTask.DependsOn[0] != "t1" {
-		t.Errorf("unexpected depends_on: %v", newTask.DependsOn)
 	}
 }

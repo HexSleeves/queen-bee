@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // GeminiClient implements Client and ToolClient for Google's Gemini API.
@@ -97,7 +98,7 @@ func NewGeminiClient(apiKey, model string) *GeminiClient {
 		apiKey:  apiKey,
 		model:   model,
 		baseURL: "https://generativelanguage.googleapis.com/v1beta",
-		client:  &http.Client{},
+		client:  &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -310,13 +311,14 @@ func (c *GeminiClient) doRequest(ctx context.Context, body geminiRequest) (*gemi
 		return nil, fmt.Errorf("gemini: marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", c.baseURL, c.model, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:generateContent", c.baseURL, c.model)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("gemini: create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", c.apiKey)
 
 	httpResp, err := c.client.Do(req)
 	if err != nil {

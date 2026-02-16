@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // OpenAIClient implements Client and ToolClient for OpenAI-compatible APIs.
@@ -94,7 +95,7 @@ func NewOpenAIClient(apiKey, model, baseURL string) *OpenAIClient {
 		apiKey:  apiKey,
 		model:   model,
 		baseURL: baseURL,
-		client:  &http.Client{},
+		client:  &http.Client{Timeout: 120 * time.Second},
 	}
 }
 

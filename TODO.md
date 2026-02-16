@@ -1,6 +1,6 @@
 # Waggle — TODO
 
-> Prioritized next steps for the next agent. Updated 2026-02-16 (session 2).
+> Prioritized next steps for the next agent. Updated 2026-02-16 (session 3).
 
 ## What's Done (don't redo these)
 
@@ -26,6 +26,7 @@
 - [x] Task synchronization (PR2) — mutex on Task struct, 14 thread-safe getters/setters, all callers updated
 - [x] Conversation persistence (PR3) — persist full []ToolMessage, tool-aware compaction, legacy fallback
 - [x] Worker pool fixes (PR4) — TOCTOU on capacity check, context cancel leak on spawn failure
+- [x] REVIEW.md comprehensive fixes (PR5+PR6) — 20 issues resolved across security, concurrency, cleanup
 
 ## P1 — High (next up)
 
@@ -48,8 +49,10 @@ Test that a rejected task actually gets re-queued with feedback and re-executed 
 ## Architectural Debt
 
 - Legacy mode uses the worker adapter for planning (spawns a "planner" worker). Agent mode avoids this.
-- `compact.Context` is write-only — wired into Queen but never read for decisions.
 - Blackboard is in-memory + persisted. On resume, in-memory starts empty.
+- `state.DB.Raw()` exposes internal `*sql.DB` — only used in tests
+- `bus` has no unsubscribe mechanism — handlers leak if used as library
+- `Task.Constraints`/`Context` not persisted by `InsertTask` — lost on resume
 
 ## VM Notes
 

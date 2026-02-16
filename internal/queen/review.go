@@ -11,18 +11,9 @@ import (
 
 // ReviewVerdict is the LLM's assessment of a completed task.
 type ReviewVerdict struct {
-	Approved    bool             `json:"approved"`
-	Reason      string           `json:"reason"`
-	Suggestions []string         `json:"suggestions,omitempty"`
-	NewTasks    []TaskSuggestion `json:"new_tasks,omitempty"`
-}
-
-// TaskSuggestion is a follow-up task identified during review.
-type TaskSuggestion struct {
-	Type        string   `json:"type"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	DependsOn   []string `json:"depends_on,omitempty"`
+	Approved    bool     `json:"approved"`
+	Reason      string   `json:"reason"`
+	Suggestions []string `json:"suggestions,omitempty"`
 }
 
 // reviewWithLLM asks the LLM to evaluate a worker's output against the
@@ -74,15 +65,7 @@ Respond with ONLY a JSON object (no markdown fences, no commentary) using this s
 {
   "approved": true|false,
   "reason": "one-paragraph explanation",
-  "suggestions": ["actionable suggestion", ...],
-  "new_tasks": [
-    {
-      "type": "code|test|review|research|generic",
-      "title": "short title",
-      "description": "what to do",
-      "depends_on": ["task-id", ...]
-    }
-  ]
+  "suggestions": ["actionable suggestion", ...]
 }`
 }
 

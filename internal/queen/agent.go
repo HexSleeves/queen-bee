@@ -27,7 +27,7 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 		return q.Run(ctx, objective)
 	}
 
-	q.objective = objective
+	q.setObjective(objective)
 	if !q.quiet {
 		q.logger.Printf("🐝 Waggle Agent Mode | Objective: %s", objective)
 	}
@@ -267,7 +267,15 @@ func (q *Queen) RunAgentResume(ctx context.Context, sessionID string) error {
 
 		resp, err := toolClient.ChatWithTools(ctx, systemPrompt, messages, tools)
 		if err != nil {
-			return fmt.Errorf("queen LLM call failed: %w", err)
+			// Retry once on transient error (same logic as RunAgent)
+			if !q.quiet {
+				q.logger.Printf("⚠ LLM call failed: %v, retrying...", err)
+			}
+			time.Sleep(2 * time.Second)
+			resp, err = toolClient.ChatWithTools(ctx, systemPrompt, messages, tools)
+			if err != nil {
+				return fmt.Errorf("queen LLM call failed: %w", err)
+			}
 		}
 
 		messages = append(messages, llm.ToolMessage{
@@ -504,12 +512,13 @@ func hasToolUse(msg llm.ToolMessage) bool {
 }
 
 // SetupSignalHandler sets up graceful shutdown on SIGINT/SIGTERM.
-// Returns a cancel function that should be deferred.
-func SetupSignalHandler(cancel context.CancelFunc) {
+// Returns a cleanup function that stops signal delivery and should be deferred.
+func SetupSignalHandler(cancel context.CancelFunc) func() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigs
 		cancel()
 	}()
+	return func() { signal.Stop(sigs) }
 }

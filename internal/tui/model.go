@@ -41,10 +41,10 @@ type TaskInfo struct {
 
 // WorkerInfo tracks worker state for display.
 type WorkerInfo struct {
-	ID      string
-	TaskID  string
-	Status  string
-	Adapter string
+	ID     string
+	TaskID string
+	Status string
+
 	Started time.Time
 }
 
@@ -456,7 +456,6 @@ func (m *Model) updateWorker(msg WorkerUpdateMsg) {
 		ID:      msg.ID,
 		TaskID:  msg.TaskID,
 		Status:  msg.Status,
-		Adapter: msg.Adapter,
 		Started: time.Now(),
 	}
 	// Track worker→task mapping for display

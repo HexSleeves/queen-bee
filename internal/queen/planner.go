@@ -6,10 +6,19 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/exedev/waggle/internal/task"
 )
+
+// taskIDCounter provides unique, collision-free task IDs.
+var taskIDCounter atomic.Int64
+
+// nextTaskID returns a unique task ID like "task-1700000000-1".
+func nextTaskID(prefix string) string {
+	return fmt.Sprintf("%s-%d-%d", prefix, time.Now().Unix(), taskIDCounter.Add(1))
+}
 
 // plan decomposes the objective into tasks
 func (q *Queen) plan(ctx context.Context) error {
@@ -38,7 +47,7 @@ func (q *Queen) plan(ctx context.Context) error {
 	if adapterName == "exec" {
 		q.logVerbose("  Using exec adapter — treating objective as single task")
 		t := &task.Task{
-			ID:          fmt.Sprintf("task-%d", time.Now().UnixNano()),
+			ID:          nextTaskID("task"),
 			Type:        task.TypeGeneric,
 			Status:      task.StatusPending,
 			Priority:    task.PriorityNormal,
@@ -55,7 +64,7 @@ func (q *Queen) plan(ctx context.Context) error {
 
 	// Use AI adapter to decompose the objective
 	planTask := &task.Task{
-		ID:          fmt.Sprintf("plan-%d", time.Now().UnixNano()),
+		ID:          nextTaskID("plan"),
 		Type:        task.TypeGeneric,
 		Status:      task.StatusPending,
 		Priority:    task.PriorityCritical,
@@ -148,9 +157,11 @@ func (q *Queen) parsePlanOutput(output string) ([]*task.Task, error) {
 	start := strings.Index(output, "[")
 	end := strings.LastIndex(output, "]")
 	if start == -1 || end == -1 || end <= start {
-		// Fallback: create a single task from the output
+		// No JSON array found — LLM returned garbage. Fall back to a single task
+		// but log a warning so the issue is visible.
+		q.logger.Printf("⚠ Plan output contained no JSON array — falling back to single task")
 		return []*task.Task{{
-			ID:          fmt.Sprintf("task-%d", time.Now().UnixNano()),
+			ID:          nextTaskID("task"),
 			Type:        task.TypeGeneric,
 			Status:      task.StatusPending,
 			Priority:    task.PriorityNormal,
@@ -186,7 +197,7 @@ func (q *Queen) parsePlanOutput(output string) ([]*task.Task, error) {
 			Timeout:      q.cfg.Workers.DefaultTimeout,
 		}
 		if t.ID == "" {
-			t.ID = fmt.Sprintf("task-%d", time.Now().UnixNano())
+			t.ID = nextTaskID("task")
 		}
 		if t.MaxRetries == 0 {
 			t.MaxRetries = q.cfg.Workers.MaxRetries
