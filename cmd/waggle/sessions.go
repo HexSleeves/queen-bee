@@ -63,3 +63,25 @@ func cmdSessions(ctx context.Context, cmd *cli.Command) error {
 	fmt.Printf("\n%d session(s)\n", len(sessions))
 	return nil
 }
+
+func cmdRemoveSession(ctx context.Context, cmd *cli.Command, _ bool) error {
+	projectDir := cmd.String("project")
+	sessionID := cmd.Args().First()
+	if sessionID == "" {
+		return fmt.Errorf("session ID required: waggle sessions --remove <session-id>")
+	}
+
+	hiveDir := filepath.Join(projectDir, ".hive")
+	db, err := state.OpenDB(hiveDir)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.RemoveSession(ctx, sessionID); err != nil {
+		return fmt.Errorf("remove session: %w", err)
+	}
+
+	fmt.Printf("Session %s removed\n", sessionID)
+	return nil
+}

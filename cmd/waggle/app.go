@@ -145,6 +145,7 @@ func newApp() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.IntFlag{Name: "limit", Value: 20, Usage: "Maximum sessions to show"},
 					&cli.BoolFlag{Name: "running", Usage: "Show only running sessions"},
+					&cli.BoolFlag{Name: "remove", Aliases: []string{"rm"}, Usage: "Remove a session", Action: cmdRemoveSession},
 				},
 				Action: cmdSessions,
 			},

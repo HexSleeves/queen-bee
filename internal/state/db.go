@@ -732,6 +732,25 @@ func (s *DB) ListSessions(ctx context.Context, limit int, onlyRunning bool) ([]S
 	return sessions, rows.Err()
 }
 
+func (s *DB) RemoveSession(ctx context.Context, sessionID string) error {
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	for _, q := range []string{
+		`DELETE FROM events WHERE session_id = ?`,
+		`DELETE FROM tasks WHERE session_id = ?`,
+		`DELETE FROM sessions WHERE id = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, sessionID); err != nil {
+			return fmt.Errorf("delete session data: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
 // ResetRunningTasks marks all 'running' tasks as 'pending' for session resumption.
 // This should be called when resuming a session to retry tasks that were interrupted.
 func (s *DB) ResetRunningTasks(ctx context.Context, sessionID string) error {
