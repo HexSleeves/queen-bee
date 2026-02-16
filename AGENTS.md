@@ -21,6 +21,7 @@ Always perform these steps before creating a commit:
 ## Project Structure
 
 See README.md for full architecture. Key packages:
+
 - `cmd/waggle/` — CLI entry point
 - `internal/queen/` — Orchestration (agent.go, queen.go, tools.go)
 - `internal/adapter/` — CLI adapters (generic.go is the base)

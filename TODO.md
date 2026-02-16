@@ -30,7 +30,9 @@
 ## P1 — High (next up)
 
 ### 6. Review Rejection Integration Test
+
 Test that a rejected task actually gets re-queued with feedback and re-executed by a new worker.
+
 - Use exec adapter with a script that fails first time, succeeds second
 - File: `internal/queen/orchestrator_test.go`
 

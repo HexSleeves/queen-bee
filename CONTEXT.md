@@ -122,6 +122,7 @@ type Adapter interface {
 ```
 
 All 6 adapters share `CLIAdapter` + `CLIWorker` from `generic.go`. Three `PromptMode` options:
+
 - `PromptAsArg` — append prompt as last CLI argument (claude, kimi, codex, opencode)
 - `PromptOnStdin` — pipe prompt to stdin (gemini)
 - `PromptAsScript` — run task description as `bash -c` script (exec)
@@ -184,12 +185,14 @@ The bridge (`tui/bridge.go`) routes log output from the Queen into structured TU
 ## Task Execution Model
 
 ### Parallelism
+
 - **Planning prompt** tells the LLM planner the worker count and instructs it to minimize dependencies
 - **Agent mode prompt** instructs the Queen to assign ALL ready tasks before waiting
 - **Legacy mode** Review→Delegate shortcut: when review finds ready tasks, skips back to delegation
 - **Worker pool** enforces `max_parallel` limit; `assign_task` returns error when full
 
 ### Per-Worker Timeout
+
 - `Pool.Spawn` wraps context with `context.WithTimeout(ctx, task.Timeout)` when `Timeout > 0`
 - `exec.CommandContext` kills the process when the deadline expires
 - `CLIWorker` detects `context.DeadlineExceeded` and reports `[timeout] worker killed`
@@ -197,6 +200,7 @@ The bridge (`tui/bridge.go`) routes log output from the Queen into structured TU
 - Default timeout: 10 minutes (from `workers.default_timeout`)
 
 ### Task Retry with Backoff
+
 - Failed tasks get `RetryAfter` set using jittered exponential backoff
 - `TaskGraph.Ready()` skips tasks whose `RetryAfter` hasn't elapsed
 - Max retries configurable per-task and globally via `workers.max_retries`
@@ -226,6 +230,7 @@ Three layers control what workers can and cannot do:
 ## Safety Guard
 
 `safety.Guard` wired into all adapter constructors, enforced at spawn time:
+
 - `ValidateTaskPaths()`, `CheckCommand()`, `IsReadOnly()`, `CheckFileSize()`
 - All adapter goroutines have `defer/recover` for panic safety
 
@@ -237,6 +242,7 @@ Three layers control what workers can and cannot do:
 ```
 
 ### SQLite Schema
+
 - **sessions** — one row per `waggle run` invocation
 - **events** — append-only event log indexed by session + type
 - **tasks** — full task state (status, worker_id, result JSON, retries, deps)
@@ -306,7 +312,7 @@ just clean              # Remove binary + .hive/
 ## Adapters — Current State
 
 | Adapter | CLI | Status |
-|---------|-----|--------|
+| ------- | --- | ------ |
 | `kimi` | `kimi --print --final-message-only -p "<prompt>"` | ✅ Working (rate-limited on this VM) |
 | `opencode` | `opencode run "<prompt>"` | ✅ Working |
 | `gemini` | `echo "<prompt>" \| gemini` | 🔑 Needs capacity |
@@ -319,7 +325,7 @@ just clean              # Remove binary + .hive/
 ## Test Coverage
 
 | Package | Tests | Status |
-|---------|-------|--------|
+| ------- | ----- | ------ |
 | `adapter` | Functionality, safety integration, prompt building, stream writer | ✅ |
 | `blackboard` | Post/Read, List, Delete, History, Watch, concurrency | ✅ |
 | `bus` | Publish, Subscribe, panic recovery | ✅ |

@@ -42,7 +42,7 @@ A **legacy mode** (`--legacy`) is available that uses a structured Plan → Dele
 
 ## Architecture
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────┐
 │                       USER OBJECTIVE                            │
 │              "Refactor the auth module to use JWT"              │
@@ -301,7 +301,7 @@ waggle/
 In agent mode, the Queen has 11 tools:
 
 | Tool | Purpose |
-|------|---------|
+| ------- | ----------- |
 | `create_tasks` | Create tasks in the graph with types, priorities, dependencies, constraints, allowed paths |
 | `assign_task` | Assign a pending task to a worker (checks deps, pool capacity, uses configured adapter) |
 | `wait_for_workers` | Block until one or more workers complete (with configurable timeout) |
