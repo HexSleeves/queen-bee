@@ -1,6 +1,6 @@
 # Waggle — Project Context
 
-> Last updated: 2026-02-16
+> Last updated: 2026-02-16 (post pterm migration, v0.1.0 released)
 
 ## What This Is
 
@@ -61,12 +61,13 @@ The structured Plan → Delegate → Monitor → Review → Replan loop. The Que
 
 | Package | File(s) | Purpose |
 |---------|---------|--------|
-| `cmd/waggle` | `main.go`, `app.go`, `commands.go`, `status.go`, `tasks.go` | CLI entry point (urfave/cli): `run`, `init`, `status`, `config`, `resume` |
+| `cmd/waggle` | `main.go`, `app.go`, `commands.go`, `status.go`, `sessions.go`, `logs.go`, `dag.go`, `tasks.go` | CLI entry point (urfave/cli): `run`, `init`, `status`, `config`, `resume`, `sessions`, `logs`, `dag`, `kill` |
 | `internal/queen` | `queen.go` | **Core orchestrator** — main loop, initialization, logging |
 | `internal/queen` | `delegate.go` | Legacy delegation phase — assigns ready tasks to workers |
 | `internal/queen` | `planner.go` | Legacy planning phase — LLM-backed task decomposition + parsing |
 | `internal/queen` | `failure.go` | Task failure handling with error classification + retry backoff |
-| `internal/queen` | `reporter.go` | Completion reporting — task result formatting + summary |
+| `internal/queen` | `reporter.go` | Completion reporting — pterm-styled task result formatting + summary |
+| `internal/queen` | `gitstate.go` | Git state tracking — `GetGitState()`, `Diff()` for worker change detection |
 | `internal/queen` | `agent.go` | **Agent mode** — autonomous tool-using LLM loop with conversation history |
 | `internal/queen` | `tools.go` | Tool definitions + handlers (create_tasks, assign_task, wait, approve, etc.) |
 | `internal/queen` | `prompt.go` | System prompt builder for agent mode |
@@ -78,6 +79,7 @@ The structured Plan → Delegate → Monitor → Review → Replan loop. The Que
 | `internal/llm` | `gemini.go` | Google Gemini API client with tool-use |
 | `internal/llm` | `cli.go` | CLI-based LLM wrapper (no tool support) |
 | `internal/llm` | `factory.go` | Provider factory: anthropic, openai, gemini, codex, kimi, gemini-cli, claude-cli, opencode |
+| `internal/llm` | `retry.go` | `IsRetryableError()` + `RetryLLMCall()` with exponential backoff |
 | `internal/tui` | `model.go`, `view.go`, `styles.go`, `events.go`, `bridge.go` | **Bubble Tea TUI dashboard** — Queen/worker/task panels with live streaming |
 | `internal/worker` | `worker.go` | `Bee` interface + concurrent `Pool` with per-task timeout enforcement |
 | `internal/adapter` | `generic.go` | **`CLIAdapter` + `CLIWorker`** — shared base for all CLI adapters with 3 prompt modes |
@@ -88,12 +90,13 @@ The structured Plan → Delegate → Monitor → Review → Replan loop. The Que
 | `internal/blackboard` | `blackboard.go` | Shared memory — workers post results, Queen reads. History capped at 10k entries. |
 | `internal/state` | `db.go` | **SQLite persistence** — sessions, events, tasks, blackboard, kv |
 | `internal/task` | `task.go` | Task graph with dependency tracking, priority, status, cycle detection, `RetryAfter` backoff, mutex-protected fields |
+| `internal/task` | `dag.go` | `RenderDOT()` and `RenderASCII()` for task dependency visualization |
 | `internal/config` | `config.go` | Configuration with defaults, JSON serialization |
 | `internal/safety` | `safety.go` | Path allowlisting, command blocklisting — enforced in all adapters |
 | `internal/compact` | `compact.go` | Context window management, token estimation, summarization |
 | `internal/errors` | `errors.go` | Error classification, retry/permanent types, jittered exponential backoff |
 
-**Total: ~10,400 lines of source + ~13,100 lines of tests across 23,500 total Go lines (76 commits)**
+**Total: ~12,400 lines of source + ~17,100 lines of tests across 29,500 total Go lines (90 commits)**
 
 ## Key Interfaces
 
@@ -173,6 +176,10 @@ Bubble Tea-based terminal UI with switchable panels:
 - **Status Bar** — Elapsed time, active worker count, navigation hints.
 
 The TUI auto-detects TTY. Falls back to plain log output with `--plain`. After completion, waits for user keypress before exiting. Interactive mode (no args) shows an objective prompt.
+
+### Styled Output (pterm)
+
+All non-TUI output uses `internal/output/printer.go` — a mode-aware wrapper around pterm. The `Printer` is active only in `ModePlain`; all methods are no-ops in TUI/JSON/Quiet mode. Methods: `Header`, `Section`, `Info`, `Success`, `Warning`, `Error`, `Debug` (verbose-only), `Table`, `BulletList`, `Tree`, `Spinner`, `KeyValue`, `Divider`. The Queen holds a `printer` field set via `SetPrinter()` with nil-safe `Printer()` fallback. Internal DB/persistence warnings still use `q.logger` (stderr).
 
 ### Output Streaming
 
@@ -266,6 +273,12 @@ waggle --json run "<obj>"             # Output results as JSON
 waggle status                         # Show current/last session
 waggle config                         # Show configuration
 waggle resume <session-id>            # Resume interrupted session
+waggle sessions                       # List past sessions
+waggle sessions --remove <id>         # Delete a session
+waggle logs [session-id]              # View event log (--follow to tail)
+waggle dag [session-id]               # DOT output of task dependency graph
+waggle dag --ascii [session-id]       # ASCII art dependency graph
+waggle kill <session-id>              # Stop a running session
 ```
 
 ## Build & Development
@@ -340,10 +353,10 @@ just clean              # Remove binary + .hive/
 | `task` | Graph, dependencies, cycle detection, status, ready | ✅ |
 | `worker` | Pool lifecycle, spawn, timeout, kill, concurrency | ✅ |
 | `cmd/waggle` | ❌ No tests |
-| `output` | ❌ No tests |
+| `output` | Printer mode filtering, verbose gating, table/bullet rendering, nil-safe spinners | ✅ |
 | `tui` | ❌ No tests |
 
-**13,100 lines of tests across 30 test files. All passing.**
+**17,100 lines of tests across 41 test files. All passing.**
 
 ## What Was Tested End-to-End
 
@@ -378,13 +391,16 @@ A principal-level code review (REVIEW.md) identified 34 findings across all seve
 - `github.com/urfave/cli/v3` — CLI framework
 - `github.com/charmbracelet/bubbletea` — TUI framework
 - `github.com/charmbracelet/lipgloss` — TUI styling
+- `github.com/pterm/pterm` — Styled terminal output (tables, headers, spinners, colored prefixes)
 - `golang.org/x/term` — TTY detection
 - Go 1.26+
 
 ## Repository
 
 - GitHub: <https://github.com/HexSleeves/waggle>
-- 76 commits on `main`
+- Module: `github.com/HexSleeves/waggle`
+- 90 commits on `main`
 - Build: `just build` / `just ci`
 - CI: GitHub Actions (fmt-check + vet + test + build on push/PR)
-- No releases yet
+- Release: v0.1.0 via GoReleaser (linux/darwin amd64/arm64, windows/amd64)
+- Session IDs: 8-char base32 random strings

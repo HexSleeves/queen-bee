@@ -1,6 +1,6 @@
 # Waggle — TODO
 
-> Prioritized next steps. Updated 2026-02-16.
+> Last updated: 2026-02-16. 90 commits, 12.4k source + 17.1k test lines.
 >
 > Improvements inspired by [Shelley](https://github.com/boldsoftware/shelley) agent architecture.
 
@@ -18,11 +18,11 @@
 - [x] GitHub Actions CI (fmt-check + vet + test + build)
 - [x] Justfile for build/test/run commands
 - [x] Queen god-object split into delegate.go, planner.go, failure.go, reporter.go
-- [x] Comprehensive test suite: 13,100 lines, 30 test files, all passing
+- [x] Comprehensive test suite: 17,100 lines, 41 test files, all passing
 - [x] Session resume E2E — 7 tests covering interrupted session continuity, task state restore, conversation history
 - [x] TUI resume mode — `cmdResume` wired into TUI with `runResumeTUI`, shared `startQueenWithFunc` helper
 - [x] Adapter health check — `HealthCheck()` on `CLIAdapter`, `setupAdapters()` extracted, fails fast before planning
-- [x] `waggle sessions` — list past sessions with task counts, JSON output support
+- [x] `waggle sessions` — list past sessions with task counts, JSON output, `--remove` flag
 - [x] `waggle logs` — tail/stream event log with `--follow`, emoji icons, JSON output
 - [x] Critical bug fixes (PR1) — 8 fixes: multi-word objectives, runJSON panic, runErr race, idempotent Close, assignment cleanup, max-iterations status, ListSessions NULL
 - [x] Task synchronization (PR2) — mutex on Task struct, 14 thread-safe getters/setters, all callers updated
@@ -30,6 +30,8 @@
 - [x] Worker pool fixes (PR4) — TOCTOU on capacity check, context cancel leak on spawn failure
 - [x] REVIEW.md comprehensive fixes (PR5+PR6) — 20 issues resolved across security, concurrency, cleanup
 - [x] Final REVIEW.md items (PR7) — remove DB.Raw(), bus unsubscribe, persist task constraints/context, extract Queen init helper
+- [x] Module rename to `github.com/HexSleeves/waggle`
+- [x] Short session IDs (8-char base32)
 
 ---
 
@@ -65,15 +67,41 @@
 
 ---
 
-## P3 — Low Priority
+## P3 — Low Priority ✅ DONE
 
-- [x] **Binary releases** — GoReleaser + GH Actions for linux/mac/arm64/windows
+- [x] **Binary releases** — GoReleaser + GH Actions for linux/mac/arm64/windows (v0.1.0 released)
 - [x] **Mixed adapters per task type** — `adapter_map` routes task types to specific adapters
 - [x] **`--dry-run` flag** — Shows planned task graph without executing workers
-- [x] **pterm output migration** — Replaced all fmt.Printf/box-drawing with pterm styled output (tables, headers, sections, bullet lists, key-value pairs); `internal/output/printer.go` wraps pterm behind mode-aware interface
+- [x] **pterm output migration** — `internal/output/printer.go` wraps pterm behind mode-aware interface; all CLI + Queen logging migrated
 - [x] **Progress bar / ETA in TUI** — `[3/5 ██████░░░░ 60%] ~2m remaining` in status bar + task panel
 - [x] **Task dependency DAG visualization** — `waggle dag` (DOT) / `waggle dag --ascii` + TUI `d` key toggle
 - [x] **Review Rejection Integration Test** — `TestRejectRequeueReexecute_E2E` + `TestRejectExhaustsRetries_E2E`
+
+---
+
+## What's Next
+
+### Feature Ideas
+
+- [ ] **Cost estimation** — Translate token usage to dollar amounts per provider/model
+- [ ] **Task templates** — Reusable task definitions (e.g., `lint`, `test`, `build` presets)
+- [ ] **Webhook notifications** — POST to URL on session complete/fail
+- [ ] **Multi-project support** — Run across multiple repos with shared Queen
+- [ ] **Plugin adapters** — Load custom adapters from external binaries/scripts
+- [ ] **`waggle watch`** — File-system watcher that re-runs objectives on change
+
+### Quality
+
+- [ ] **CLI integration tests** — `cmd/waggle/` has no tests; test init/run/status/sessions end-to-end
+- [ ] **TUI tests** — `internal/tui/` has no tests; test view rendering + key handlers
+- [ ] **Fuzz tests** — Fuzz JSON parsing in LLM clients and task file loader
+
+### Performance
+
+- [ ] **Streaming LLM responses** — Stream Queen's thinking to TUI in real-time (currently waits for full response)
+- [ ] **Parallel tool execution** — When Queen returns multiple tool calls, execute independent ones concurrently
+
+---
 
 ## Architectural Debt ✅ RESOLVED
 

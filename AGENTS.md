@@ -20,10 +20,21 @@ Always perform these steps before creating a commit:
 
 ## Project Structure
 
-See README.md for full architecture. Key packages:
+See README.md and ARCHITECTURE.md for full details. Key packages:
 
-- `cmd/waggle/` — CLI entry point
-- `internal/queen/` — Orchestration (agent.go, queen.go, tools.go)
+- `cmd/waggle/` — CLI entry point (run, init, status, sessions, logs, dag, kill, resume, config)
+- `internal/queen/` — Orchestration (agent.go, queen.go, tools.go, reporter.go, gitstate.go)
 - `internal/adapter/` — CLI adapters (generic.go is the base)
-- `internal/state/` — SQLite persistence
-- `internal/tui/` — Bubble Tea TUI
+- `internal/llm/` — Provider-agnostic LLM client (anthropic.go, openai.go, gemini.go, retry.go)
+- `internal/output/` — Output mode manager + pterm Printer wrapper
+- `internal/state/` — SQLite persistence (WAL mode, reader/writer pools)
+- `internal/task/` — Task graph with dependency tracking + DAG visualization
+- `internal/tui/` — Bubble Tea TUI with progress bar + DAG panel
+
+## Key Design Notes
+
+- `q.logger` = internal warnings to stderr (always active)
+- `q.Printer()` = user-facing styled output via pterm (only active in `--plain` mode)
+- TUI mode has its own rendering pipeline; Printer is a no-op
+- Session IDs are 8-char base32 random strings
+- v0.1.0 released via GoReleaser
