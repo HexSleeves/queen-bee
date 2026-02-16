@@ -153,17 +153,11 @@ func runInteractiveTUI(ctx context.Context, cfg *config.Config, tasksFile string
 			return
 		}
 
-		logger := log.New(tuiProg.LogWriter(), "", log.LstdFlags)
-
-		q, err := queen.New(cfg, logger)
+		q, err := newQueenForTUI(cfg, tuiProg)
 		if err != nil {
 			tuiProg.SendDone(false, "", fmt.Sprintf("init queen: %v", err))
 			return
 		}
-		q.SetLogger(logger)
-		q.SuppressReport()
-
-		subscribeBusEvents(q, tuiProg)
 
 		if tasksFile != "" {
 			tasks, err := loadTasksFile(tasksFile, cfg)
@@ -183,6 +177,19 @@ func runInteractiveTUI(ctx context.Context, cfg *config.Config, tasksFile string
 		return fmt.Errorf("TUI error: %w", err)
 	}
 	return nil
+}
+
+// newQueenForTUI creates a Queen wired to a TUI program with logger, report suppression, and bus events.
+func newQueenForTUI(cfg *config.Config, tuiProg *tui.Program) (*queen.Queen, error) {
+	logger := log.New(tuiProg.LogWriter(), "", log.LstdFlags)
+	q, err := queen.New(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+	q.SetLogger(logger)
+	q.SuppressReport()
+	subscribeBusEvents(q, tuiProg)
+	return q, nil
 }
 
 // subscribeBusEvents wires Queen bus events to the TUI program.
@@ -299,16 +306,10 @@ func runWithTUI(ctx context.Context, cfg *config.Config, objective, tasksFile st
 	}
 	tuiProg := tui.NewProgram(objective, maxTurns)
 
-	logger := log.New(tuiProg.LogWriter(), "", log.LstdFlags)
-
-	q, err := queen.New(cfg, logger)
+	q, err := newQueenForTUI(cfg, tuiProg)
 	if err != nil {
 		return fmt.Errorf("init queen: %w", err)
 	}
-	q.SetLogger(logger)
-	q.SuppressReport()
-
-	subscribeBusEvents(q, tuiProg)
 
 	if tasksFile != "" {
 		tasks, err := loadTasksFile(tasksFile, cfg)
@@ -654,14 +655,10 @@ func runResumeTUI(ctx context.Context, cfg *config.Config, sessionID, objective 
 	}
 	tuiProg := tui.NewProgram(objective, maxTurns)
 
-	logger := log.New(tuiProg.LogWriter(), "", log.LstdFlags)
-
-	q, err := queen.New(cfg, logger)
+	q, err := newQueenForTUI(cfg, tuiProg)
 	if err != nil {
 		return fmt.Errorf("init queen: %w", err)
 	}
-	q.SetLogger(logger)
-	q.SuppressReport()
 
 	// Resume the session so the Queen reloads prior state
 	resumedObjective, err := q.ResumeSession(ctx, sessionID)
@@ -669,12 +666,9 @@ func runResumeTUI(ctx context.Context, cfg *config.Config, sessionID, objective 
 		q.Close()
 		return fmt.Errorf("resume session: %w", err)
 	}
-	// Use the objective returned by ResumeSession (should match, but be safe)
 	if resumedObjective != "" {
 		objective = resumedObjective
 	}
-
-	subscribeBusEvents(q, tuiProg)
 
 	cancel, errCh := startQueenResume(ctx, q, tuiProg, sessionID, objective, forceLegacy)
 

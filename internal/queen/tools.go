@@ -12,7 +12,6 @@ import (
 
 	"github.com/exedev/waggle/internal/blackboard"
 	"github.com/exedev/waggle/internal/llm"
-	"github.com/exedev/waggle/internal/state"
 	"github.com/exedev/waggle/internal/task"
 	"github.com/exedev/waggle/internal/worker"
 )
@@ -276,11 +275,7 @@ func handleCreateTasks(ctx context.Context, q *Queen, input json.RawMessage) (st
 
 	// Persist to DB (tasks already added to graph above for cycle detection)
 	for _, t := range created {
-		if err := q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
-			ID: t.ID, Type: string(t.Type), Status: string(t.Status),
-			Priority: int(t.Priority), Title: t.Title, Description: t.Description,
-			MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
-		}); err != nil {
+		if err := q.db.InsertTask(ctx, q.sessionID, taskToRow(t)); err != nil {
 			q.logger.Printf("⚠ Warning: failed to insert task: %v", err)
 		}
 	}

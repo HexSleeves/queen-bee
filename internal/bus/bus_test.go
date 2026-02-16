@@ -68,16 +68,72 @@ func TestSubscribe(t *testing.T) {
 		received.Store(true)
 	}
 
-	b.Subscribe(MsgTaskCreated, handler)
+	sub := b.Subscribe(MsgTaskCreated, handler)
+	if sub == nil {
+		t.Fatal("Subscribe returned nil")
+	}
 
 	// Check handler was registered
 	b.mu.RLock()
-	handlers := b.handlers[MsgTaskCreated]
+	entries := b.handlers[MsgTaskCreated]
 	b.mu.RUnlock()
 
-	if len(handlers) != 1 {
-		t.Errorf("Expected 1 handler, got %d", len(handlers))
+	if len(entries) != 1 {
+		t.Errorf("Expected 1 handler, got %d", len(entries))
 	}
+}
+
+func TestUnsubscribe(t *testing.T) {
+	b := New(100)
+
+	var count atomic.Int32
+	sub := b.Subscribe(MsgTaskCreated, func(msg Message) {
+		count.Add(1)
+	})
+
+	b.Publish(Message{Type: MsgTaskCreated})
+	time.Sleep(10 * time.Millisecond)
+	if count.Load() != 1 {
+		t.Fatalf("Expected 1 call before unsubscribe, got %d", count.Load())
+	}
+
+	sub.Unsubscribe()
+
+	b.Publish(Message{Type: MsgTaskCreated})
+	time.Sleep(10 * time.Millisecond)
+	if count.Load() != 1 {
+		t.Errorf("Expected no new calls after unsubscribe, got %d", count.Load())
+	}
+}
+
+func TestUnsubscribeAll(t *testing.T) {
+	b := New(100)
+
+	var count atomic.Int32
+	sub := b.SubscribeAll(func(msg Message) {
+		count.Add(1)
+	})
+
+	b.Publish(Message{Type: MsgTaskCreated})
+	time.Sleep(10 * time.Millisecond)
+	if count.Load() != 1 {
+		t.Fatalf("Expected 1 call before unsubscribe, got %d", count.Load())
+	}
+
+	sub.Unsubscribe()
+
+	b.Publish(Message{Type: MsgWorkerSpawned})
+	time.Sleep(10 * time.Millisecond)
+	if count.Load() != 1 {
+		t.Errorf("Expected no new calls after unsubscribe, got %d", count.Load())
+	}
+}
+
+func TestUnsubscribeIdempotent(t *testing.T) {
+	b := New(100)
+	sub := b.Subscribe(MsgTaskCreated, func(msg Message) {})
+	sub.Unsubscribe()
+	sub.Unsubscribe() // should not panic
 }
 
 func TestSubscribeMultiple(t *testing.T) {

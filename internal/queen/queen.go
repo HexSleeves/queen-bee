@@ -119,6 +119,33 @@ func (q *Queen) ResumeSession(ctx context.Context, sessionID string) (string, er
 	return q.objective, nil
 }
 
+// taskToRow converts a task.Task to a state.TaskRow for persistence.
+func taskToRow(t *task.Task) state.TaskRow {
+	row := state.TaskRow{
+		ID:          t.ID,
+		Type:        string(t.Type),
+		Status:      string(t.Status),
+		Priority:    int(t.Priority),
+		Title:       t.Title,
+		Description: t.GetDescription(),
+		MaxRetries:  t.MaxRetries,
+		DependsOn:   strings.Join(t.DependsOn, ","),
+	}
+	if c := t.GetConstraints(); len(c) > 0 {
+		data, _ := json.Marshal(c)
+		row.Constraints = string(data)
+	}
+	if len(t.AllowedPaths) > 0 {
+		data, _ := json.Marshal(t.AllowedPaths)
+		row.AllowedPaths = string(data)
+	}
+	if len(t.Context) > 0 {
+		data, _ := json.Marshal(t.Context)
+		row.Context = string(data)
+	}
+	return row
+}
+
 // taskFromRow converts a state.TaskRow to a task.Task
 func taskFromRow(tr *state.TaskRow) *task.Task {
 	// Parse depends_on from comma-separated string
@@ -181,6 +208,26 @@ func taskFromRow(tr *state.TaskRow) *task.Task {
 			if et, ok := data["last_error_type"].(string); ok {
 				t.LastErrorType = et
 			}
+		}
+	}
+
+	// Restore constraints, context, allowed_paths from JSON
+	if tr.Constraints != "" {
+		var c []string
+		if json.Unmarshal([]byte(tr.Constraints), &c) == nil {
+			t.Constraints = c
+		}
+	}
+	if tr.Context != "" {
+		var ctx map[string]string
+		if json.Unmarshal([]byte(tr.Context), &ctx) == nil {
+			t.Context = ctx
+		}
+	}
+	if tr.AllowedPaths != "" {
+		var ap []string
+		if json.Unmarshal([]byte(tr.AllowedPaths), &ap) == nil {
+			t.AllowedPaths = ap
 		}
 	}
 
@@ -660,11 +707,7 @@ func injectDefaultConstraints(t *task.Task) {
 // persistNewTask adds a task to the graph and persists it to the database.
 func (q *Queen) persistNewTask(ctx context.Context, t *task.Task) {
 	q.tasks.Add(t)
-	err := q.db.InsertTask(ctx, q.sessionID, state.TaskRow{
-		ID: t.ID, Type: string(t.Type), Status: string(t.Status),
-		Priority: int(t.Priority), Title: t.Title, Description: t.Description,
-		MaxRetries: t.MaxRetries, DependsOn: strings.Join(t.DependsOn, ","),
-	})
+	err := q.db.InsertTask(ctx, q.sessionID, taskToRow(t))
 	if err != nil {
 		q.logger.Printf("⚠ Warning: failed to persist new task %s: %v", t.ID, err)
 		q.tasks.Remove(t.ID)

@@ -532,17 +532,6 @@ func TestDBClose(t *testing.T) {
 	}
 }
 
-func TestDBRaw(t *testing.T) {
-	tmpDir := t.TempDir()
-	db, _ := OpenDB(tmpDir)
-	defer db.Close()
-
-	raw := db.Raw()
-	if raw == nil {
-		t.Error("Raw() returned nil")
-	}
-}
-
 func TestTaskRowStruct(t *testing.T) {
 	workerID := "worker-1"
 	result := "{\"success\": true}"

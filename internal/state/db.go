@@ -111,7 +111,19 @@ func (s *DB) migrate() error {
 	);
 	`
 	_, err := s.db.Exec(ddl)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add columns for task constraints/context/allowed_paths (idempotent).
+	for _, col := range []string{
+		"ALTER TABLE tasks ADD COLUMN constraints TEXT",
+		"ALTER TABLE tasks ADD COLUMN allowed_paths TEXT",
+	} {
+		_, _ = s.db.Exec(col) // ignore "duplicate column" errors
+	}
+
+	return nil
 }
 
 // --- Session operations ---
@@ -274,34 +286,46 @@ func (s *DB) EventCount(ctx context.Context, sessionID string) (int, error) {
 // --- Task operations ---
 
 type TaskRow struct {
-	ID          string  `json:"id"`
-	SessionID   string  `json:"session_id"`
-	Type        string  `json:"type"`
-	Status      string  `json:"status"`
-	Priority    int     `json:"priority"`
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	WorkerID    *string `json:"worker_id,omitempty"`
-	Result      *string `json:"result,omitempty"`
-	ResultData  *string `json:"result_data,omitempty"`
-	MaxRetries  int     `json:"max_retries"`
-	RetryCount  int     `json:"retry_count"`
-	DependsOn   string  `json:"depends_on"`
-	CreatedAt   string  `json:"created_at"`
-	StartedAt   *string `json:"started_at,omitempty"`
-	CompletedAt *string `json:"completed_at,omitempty"`
+	ID           string  `json:"id"`
+	SessionID    string  `json:"session_id"`
+	Type         string  `json:"type"`
+	Status       string  `json:"status"`
+	Priority     int     `json:"priority"`
+	Title        string  `json:"title"`
+	Description  string  `json:"description"`
+	Constraints  string  `json:"constraints,omitempty"`   // JSON array of strings
+	Context      string  `json:"context,omitempty"`       // JSON object of key-value pairs
+	AllowedPaths string  `json:"allowed_paths,omitempty"` // JSON array of strings
+	WorkerID     *string `json:"worker_id,omitempty"`
+	Result       *string `json:"result,omitempty"`
+	ResultData   *string `json:"result_data,omitempty"`
+	MaxRetries   int     `json:"max_retries"`
+	RetryCount   int     `json:"retry_count"`
+	DependsOn    string  `json:"depends_on"`
+	CreatedAt    string  `json:"created_at"`
+	StartedAt    *string `json:"started_at,omitempty"`
+	CompletedAt  *string `json:"completed_at,omitempty"`
 }
 
 func (s *DB) InsertTask(ctx context.Context, sessionID string, t TaskRow) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO tasks
-		(id, session_id, type, status, priority, title, description, max_retries, retry_count, depends_on, timeout_ns, created_at, result_data)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(id, session_id, type, status, priority, title, description, constraints, allowed_paths, context, max_retries, retry_count, depends_on, timeout_ns, created_at, result_data)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, sessionID, t.Type, t.Status, t.Priority, t.Title, t.Description,
+		nilIfEmpty(t.Constraints), nilIfEmpty(t.AllowedPaths), nilIfEmpty(t.Context),
 		t.MaxRetries, t.RetryCount, t.DependsOn, 0, now, t.ResultData,
 	)
 	return err
+}
+
+// nilIfEmpty returns nil for empty strings so SQLite stores NULL.
+func nilIfEmpty(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (s *DB) UpdateTaskStatus(ctx context.Context, sessionID, taskID, status string) error {
@@ -406,11 +430,15 @@ func (s *DB) IncrementTaskRetry(ctx context.Context, sessionID, taskID string) (
 	return count, tx.Commit()
 }
 
+// taskSelectCols is the column list for all task SELECT queries.
+const taskSelectCols = `id, session_id, type, status, priority, title, description,
+	constraints, context, allowed_paths,
+	worker_id, result, max_retries, retry_count, depends_on,
+	created_at, started_at, completed_at, result_data`
+
 func (s *DB) GetTask(ctx context.Context, sessionID, taskID string) (*TaskRow, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, session_id, type, status, priority, title, description, worker_id, result,
-		 max_retries, retry_count, depends_on, created_at, started_at, completed_at, result_data
-		 FROM tasks WHERE id = ? AND session_id = ?`,
+		`SELECT `+taskSelectCols+` FROM tasks WHERE id = ? AND session_id = ?`,
 		taskID, sessionID,
 	)
 	return scanTask(row)
@@ -418,9 +446,7 @@ func (s *DB) GetTask(ctx context.Context, sessionID, taskID string) (*TaskRow, e
 
 func (s *DB) GetTasks(ctx context.Context, sessionID string) ([]TaskRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, session_id, type, status, priority, title, description, worker_id, result,
-		 max_retries, retry_count, depends_on, created_at, started_at, completed_at, result_data
-		 FROM tasks WHERE session_id = ? ORDER BY priority DESC, created_at`,
+		`SELECT `+taskSelectCols+` FROM tasks WHERE session_id = ? ORDER BY priority DESC, created_at`,
 		sessionID,
 	)
 	if err != nil {
@@ -440,9 +466,7 @@ func (s *DB) GetTasks(ctx context.Context, sessionID string) ([]TaskRow, error) 
 
 func (s *DB) GetTasksByStatus(ctx context.Context, sessionID, status string) ([]TaskRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, session_id, type, status, priority, title, description, worker_id, result,
-		 max_retries, retry_count, depends_on, created_at, started_at, completed_at, result_data
-		 FROM tasks WHERE session_id = ? AND status = ? ORDER BY priority DESC`,
+		`SELECT `+taskSelectCols+` FROM tasks WHERE session_id = ? AND status = ? ORDER BY priority DESC`,
 		sessionID, status,
 	)
 	if err != nil {
@@ -521,10 +545,6 @@ func (s *DB) Close() error {
 	return s.db.Close()
 }
 
-func (s *DB) Raw() *sql.DB {
-	return s.db
-}
-
 // --- scan helpers ---
 
 type scannable interface {
@@ -533,15 +553,21 @@ type scannable interface {
 
 func scanTask(row scannable) (*TaskRow, error) {
 	var t TaskRow
+	var constraints, ctx, allowedPaths sql.NullString
 	err := row.Scan(
 		&t.ID, &t.SessionID, &t.Type, &t.Status, &t.Priority,
-		&t.Title, &t.Description, &t.WorkerID, &t.Result,
+		&t.Title, &t.Description,
+		&constraints, &ctx, &allowedPaths,
+		&t.WorkerID, &t.Result,
 		&t.MaxRetries, &t.RetryCount, &t.DependsOn,
 		&t.CreatedAt, &t.StartedAt, &t.CompletedAt, &t.ResultData,
 	)
 	if err != nil {
 		return nil, err
 	}
+	t.Constraints = constraints.String
+	t.Context = ctx.String
+	t.AllowedPaths = allowedPaths.String
 	return &t, nil
 }
 

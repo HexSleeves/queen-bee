@@ -27,6 +27,7 @@
 - [x] Conversation persistence (PR3) — persist full []ToolMessage, tool-aware compaction, legacy fallback
 - [x] Worker pool fixes (PR4) — TOCTOU on capacity check, context cancel leak on spawn failure
 - [x] REVIEW.md comprehensive fixes (PR5+PR6) — 20 issues resolved across security, concurrency, cleanup
+- [x] Final REVIEW.md items (PR7) — remove DB.Raw(), bus unsubscribe, persist task constraints/context, extract Queen init helper
 
 ## P1 — High (next up)
 
@@ -50,9 +51,6 @@ Test that a rejected task actually gets re-queued with feedback and re-executed 
 
 - Legacy mode uses the worker adapter for planning (spawns a "planner" worker). Agent mode avoids this.
 - Blackboard is in-memory + persisted. On resume, in-memory starts empty.
-- `state.DB.Raw()` exposes internal `*sql.DB` — only used in tests
-- `bus` has no unsubscribe mechanism — handlers leak if used as library
-- `Task.Constraints`/`Context` not persisted by `InsertTask` — lost on resume
 
 ## VM Notes
 
