@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/exedev/waggle/internal/llm"
-	"github.com/exedev/waggle/internal/task"
 )
 
 // RunAgent executes the Queen as an autonomous tool-using LLM agent.
@@ -33,35 +32,9 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 		q.logger.Printf("🐝 Waggle Agent Mode | Objective: %s", objective)
 	}
 
-	// Preflight: verify adapters
-	available := q.registry.Available()
-	if len(available) == 0 {
-		return fmt.Errorf("no adapters available — install claude, codex, or opencode CLI")
-	}
-	defaultAdapter := q.cfg.Workers.DefaultAdapter
-	allTypes := []task.Type{task.TypeCode, task.TypeResearch, task.TypeTest, task.TypeReview, task.TypeGeneric}
-	if a, ok := q.registry.Get(defaultAdapter); !ok || !a.Available() {
-		if !q.quiet {
-			q.logger.Printf("⚠ Default adapter %q not available, falling back to: %s", defaultAdapter, available[0])
-		}
-		for _, tt := range allTypes {
-			q.router.SetRoute(tt, available[0])
-		}
-	} else {
-		// Ensure all task types route to the user's chosen adapter
-		for _, tt := range allTypes {
-			q.router.SetRoute(tt, defaultAdapter)
-		}
-	}
-	// Filter exec from display unless it's the chosen adapter
-	displayAdapters := make([]string, 0, len(available))
-	for _, name := range available {
-		if name != "exec" || defaultAdapter == "exec" {
-			displayAdapters = append(displayAdapters, name)
-		}
-	}
-	if !q.quiet {
-		q.logger.Printf("✓ Using adapter: %s | Available: %v", defaultAdapter, displayAdapters)
+	// Preflight: verify and configure adapters
+	if err := q.setupAdapters(ctx); err != nil {
+		return err
 	}
 
 	// Create DB session

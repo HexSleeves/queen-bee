@@ -315,12 +315,10 @@ func New(cfg *config.Config, logger *log.Logger) (*Queen, error) {
 	return q, nil
 }
 
-// Run executes the Queen's main loop: Plan -> Delegate -> Monitor -> Review
-func (q *Queen) Run(ctx context.Context, objective string) error {
-	q.objective = objective
-	q.logger.Printf("🐝 Waggle starting | Objective: %s", objective)
-
-	// Preflight: verify the default adapter is available
+// setupAdapters verifies adapter availability, routes all task types to the
+// chosen (or fallback) adapter, runs a health check, and logs the result.
+// Both Run() and RunAgent() call this during preflight.
+func (q *Queen) setupAdapters(ctx context.Context) error {
 	available := q.registry.Available()
 	if len(available) == 0 {
 		return fmt.Errorf("no adapters available — install claude, codex, or opencode CLI")
@@ -328,12 +326,13 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 	defaultAdapter := q.cfg.Workers.DefaultAdapter
 	allTypes := []task.Type{task.TypeCode, task.TypeResearch, task.TypeTest, task.TypeReview, task.TypeGeneric}
 	if a, ok := q.registry.Get(defaultAdapter); !ok || !a.Available() {
-		q.logger.Printf("⚠ Default adapter %q not available, falling back to: %s", defaultAdapter, available[0])
+		if !q.quiet {
+			q.logger.Printf("⚠ Default adapter %q not available, falling back to: %s", defaultAdapter, available[0])
+		}
 		for _, tt := range allTypes {
 			q.router.SetRoute(tt, available[0])
 		}
 	} else {
-		q.logger.Printf("✓ Using adapter: %s", defaultAdapter)
 		// Ensure all task types route to the user's chosen adapter
 		for _, tt := range allTypes {
 			q.router.SetRoute(tt, defaultAdapter)
@@ -346,7 +345,32 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 			displayAdapters = append(displayAdapters, name)
 		}
 	}
-	q.logger.Printf("✓ Available adapters: %v", displayAdapters)
+	if !q.quiet {
+		q.logger.Printf("✓ Using adapter: %s | Available: %v", defaultAdapter, displayAdapters)
+	}
+
+	// Health check: verify the adapter actually works
+	if adapter, ok := q.registry.Get(defaultAdapter); ok {
+		if err := adapter.HealthCheck(ctx); err != nil {
+			return fmt.Errorf("adapter health check failed: %w", err)
+		}
+		if !q.quiet {
+			q.logger.Printf("✓ Adapter health check passed")
+		}
+	}
+
+	return nil
+}
+
+// Run executes the Queen's main loop: Plan -> Delegate -> Monitor -> Review
+func (q *Queen) Run(ctx context.Context, objective string) error {
+	q.objective = objective
+	q.logger.Printf("🐝 Waggle starting | Objective: %s", objective)
+
+	// Preflight: verify and configure adapters
+	if err := q.setupAdapters(ctx); err != nil {
+		return err
+	}
 
 	// Create DB session
 	q.sessionID = fmt.Sprintf("session-%d", time.Now().UnixNano())

@@ -2,6 +2,7 @@ package queen
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/exedev/waggle/internal/config"
+	"github.com/exedev/waggle/internal/llm"
 	"github.com/exedev/waggle/internal/state"
 	"github.com/exedev/waggle/internal/task"
 )
@@ -567,4 +569,196 @@ func TestSavePhase(t *testing.T) {
 	q.Close()
 
 	t.Logf("✅ Phase saved correctly: %s, iteration %d", phase, iteration)
+}
+
+// TestLoadConversation_RestoresTurns persists turns via persistTurn
+// and verifies loadConversation reconstructs them correctly.
+func TestLoadConversation_RestoresTurns(t *testing.T) {
+	q, _ := testQueen(t)
+	ctx := context.Background()
+
+	// persistTurn saves llm.Response objects keyed by turn number
+	turn0 := &llm.Response{
+		Content: []llm.ContentBlock{
+			{Type: "text", Text: "I will create tasks for this objective."},
+		},
+		StopReason: "tool_use",
+	}
+	turn1 := &llm.Response{
+		Content: []llm.ContentBlock{
+			{Type: "text", Text: "Tasks created. Assigning task-1."},
+			{Type: "tool_use", ToolCall: &llm.ToolCall{
+				ID:    "call-1",
+				Name:  "assign_task",
+				Input: json.RawMessage(`{"task_id":"t1"}`),
+			}},
+		},
+		StopReason: "tool_use",
+	}
+
+	q.persistTurn(ctx, 0, turn0)
+	q.persistTurn(ctx, 1, turn1)
+
+	// loadConversation should reconstruct messages
+	msgs, err := q.loadConversation(ctx, q.sessionID)
+	if err != nil {
+		t.Fatalf("loadConversation failed: %v", err)
+	}
+
+	// First message is always the objective (from session)
+	if len(msgs) < 1 {
+		t.Fatal("expected at least 1 message (objective)")
+	}
+	if msgs[0].Role != "user" {
+		t.Errorf("first message role: want 'user', got %q", msgs[0].Role)
+	}
+	if len(msgs[0].Content) == 0 || msgs[0].Content[0].Text == "" {
+		t.Error("first message should contain the objective text")
+	}
+
+	// Then 2 assistant messages (turn 0 and turn 1)
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages (1 objective + 2 turns), got %d", len(msgs))
+	}
+
+	// Verify turn 0 content
+	if msgs[1].Role != "assistant" {
+		t.Errorf("turn 0 role: want 'assistant', got %q", msgs[1].Role)
+	}
+	if len(msgs[1].Content) != 1 || msgs[1].Content[0].Text != "I will create tasks for this objective." {
+		t.Errorf("turn 0 content mismatch: %+v", msgs[1].Content)
+	}
+
+	// Verify turn 1 content (has both text and tool_use)
+	if msgs[2].Role != "assistant" {
+		t.Errorf("turn 1 role: want 'assistant', got %q", msgs[2].Role)
+	}
+	if len(msgs[2].Content) != 2 {
+		t.Fatalf("turn 1 expected 2 content blocks, got %d", len(msgs[2].Content))
+	}
+	if msgs[2].Content[0].Type != "text" {
+		t.Errorf("turn 1 block 0 type: want 'text', got %q", msgs[2].Content[0].Type)
+	}
+	if msgs[2].Content[1].Type != "tool_use" {
+		t.Errorf("turn 1 block 1 type: want 'tool_use', got %q", msgs[2].Content[1].Type)
+	}
+	if msgs[2].Content[1].ToolCall == nil || msgs[2].Content[1].ToolCall.Name != "assign_task" {
+		t.Errorf("turn 1 tool call mismatch: %+v", msgs[2].Content[1].ToolCall)
+	}
+
+	t.Log("✅ loadConversation correctly restored turns")
+}
+
+// TestResumeSession_CompletedTasksNotReRun verifies that completed tasks
+// are not re-executed after resume. Only pending/reset tasks should be ready.
+func TestResumeSession_CompletedTasksNotReRun(t *testing.T) {
+	tempDir := t.TempDir()
+	hiveDir := filepath.Join(tempDir, ".hive")
+	if err := os.MkdirAll(hiveDir, 0755); err != nil {
+		t.Fatalf("create hive dir: %v", err)
+	}
+
+	logger := log.New(os.Stderr, "[TEST] ", log.LstdFlags)
+
+	cfg := &config.Config{
+		ProjectDir: tempDir,
+		HiveDir:    ".hive",
+		Queen: config.QueenConfig{
+			Provider:      "",
+			MaxIterations: 10,
+		},
+		Workers: config.WorkerConfig{
+			MaxParallel:    2,
+			MaxRetries:     2,
+			DefaultTimeout: 5 * time.Minute,
+			DefaultAdapter: "exec",
+		},
+		Adapters: map[string]config.AdapterConfig{
+			"exec": {Command: "bash"},
+		},
+		Safety: config.SafetyConfig{
+			AllowedPaths: []string{"."},
+			MaxFileSize:  10 * 1024 * 1024,
+		},
+	}
+
+	// Set up session in DB with task-a complete, task-b pending (depends on task-a)
+	db, err := state.OpenDB(hiveDir)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+
+	sessionID := fmt.Sprintf("session-no-rerun-%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if err := db.CreateSession(ctx, sessionID, "Test no re-run"); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	// task-a: already complete
+	if err := db.InsertTask(ctx, sessionID, state.TaskRow{
+		ID: "task-a", Type: "code", Status: "complete",
+		Priority: 1, Title: "Task A", Description: "Already done",
+		MaxRetries: 2,
+	}); err != nil {
+		t.Fatalf("insert task-a: %v", err)
+	}
+
+	// task-b: pending, depends on task-a
+	if err := db.InsertTask(ctx, sessionID, state.TaskRow{
+		ID: "task-b", Type: "code", Status: "pending",
+		Priority: 1, Title: "Task B", Description: "Depends on A",
+		MaxRetries: 2, DependsOn: "task-a",
+	}); err != nil {
+		t.Fatalf("insert task-b: %v", err)
+	}
+
+	db.Close()
+
+	// Create Queen and resume
+	q, err := New(cfg, logger)
+	if err != nil {
+		t.Fatalf("create queen: %v", err)
+	}
+	defer q.Close()
+
+	if _, err := q.ResumeSession(ctx, sessionID); err != nil {
+		t.Fatalf("resume session: %v", err)
+	}
+
+	// Verify task-a is complete in the graph
+	taskA, ok := q.tasks.Get("task-a")
+	if !ok {
+		t.Fatal("task-a not found in graph")
+	}
+	if taskA.Status != task.StatusComplete {
+		t.Errorf("task-a status: want complete, got %s", taskA.Status)
+	}
+
+	// Verify task-b is pending
+	taskB, ok := q.tasks.Get("task-b")
+	if !ok {
+		t.Fatal("task-b not found in graph")
+	}
+	if taskB.Status != task.StatusPending {
+		t.Errorf("task-b status: want pending, got %s", taskB.Status)
+	}
+
+	// Ask the task graph for ready tasks — task-b should be ready
+	// because its dependency task-a is complete
+	ready := q.tasks.Ready()
+	if len(ready) != 1 {
+		t.Fatalf("expected 1 ready task, got %d", len(ready))
+	}
+	if ready[0].ID != "task-b" {
+		t.Errorf("ready task: want task-b, got %s", ready[0].ID)
+	}
+
+	// Completed task-a should NOT appear in the ready list
+	for _, r := range ready {
+		if r.ID == "task-a" {
+			t.Error("task-a (complete) should NOT be in ready list")
+		}
+	}
+
+	t.Log("✅ Completed tasks not re-run after resume")
 }

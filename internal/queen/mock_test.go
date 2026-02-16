@@ -134,6 +134,14 @@ func (m *MockAdapter) Available() bool {
 	return m.available
 }
 
+// HealthCheck verifies the adapter actually works
+func (m *MockAdapter) HealthCheck(ctx context.Context) error {
+	if !m.available {
+		return fmt.Errorf("adapter %q not available", m.name)
+	}
+	return nil
+}
+
 // CreateWorker creates a new worker.Bee
 func (m *MockAdapter) CreateWorker(id string) worker.Bee {
 	if m.workerFactory != nil {

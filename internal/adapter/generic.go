@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/exedev/waggle/internal/errors"
 	"github.com/exedev/waggle/internal/safety"
@@ -84,6 +85,30 @@ func (a *CLIAdapter) Name() string { return a.name }
 func (a *CLIAdapter) Available() bool {
 	_, err := exec.LookPath(a.command)
 	return err == nil
+}
+
+func (a *CLIAdapter) HealthCheck(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var cmd *exec.Cmd
+	switch a.mode {
+	case PromptAsScript:
+		cmd = exec.CommandContext(ctx, a.command, "-c", "echo ok")
+	default:
+		// Try --version first (most CLIs support this)
+		cmd = exec.CommandContext(ctx, a.command, "--version")
+	}
+
+	if a.workDir != "" {
+		cmd.Dir = a.workDir
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("adapter %q health check failed: %w (output: %s)", a.name, err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func (a *CLIAdapter) CreateWorker(id string) worker.Bee {

@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +12,51 @@ import (
 	"github.com/exedev/waggle/internal/task"
 	"github.com/exedev/waggle/internal/worker"
 )
+
+// TestHealthCheckExecAdapter tests that HealthCheck passes for the exec adapter (bash)
+func TestHealthCheckExecAdapter(t *testing.T) {
+	adapter := NewExecAdapter(t.TempDir(), nil)
+	if !adapter.Available() {
+		t.Skip("bash not available")
+	}
+
+	ctx := context.Background()
+	err := adapter.HealthCheck(ctx)
+	if err != nil {
+		t.Errorf("expected exec adapter health check to pass, got: %v", err)
+	}
+}
+
+// TestHealthCheckNonExistentCommand tests that HealthCheck returns error for a missing command
+func TestHealthCheckNonExistentCommand(t *testing.T) {
+	adapter := NewCLIAdapter(CLIAdapterConfig{
+		Name:    "bogus",
+		Command: "nonexistent-command-that-does-not-exist-xyz",
+		Mode:    PromptAsArg,
+	})
+
+	ctx := context.Background()
+	err := adapter.HealthCheck(ctx)
+	if err == nil {
+		t.Error("expected health check to fail for non-existent command")
+	}
+}
+
+// TestHealthCheckVersionCommand tests that --version mode works for real CLI tools
+func TestHealthCheckVersionCommand(t *testing.T) {
+	// Use 'echo' as a stand-in CLI; "echo --version" will succeed
+	adapter := NewCLIAdapter(CLIAdapterConfig{
+		Name:    "echo-test",
+		Command: "echo",
+		Mode:    PromptAsArg,
+	})
+
+	ctx := context.Background()
+	err := adapter.HealthCheck(ctx)
+	if err != nil {
+		t.Errorf("expected health check to pass for echo, got: %v", err)
+	}
+}
 
 // TestAdapterRegistry tests the adapter registry functionality
 func TestAdapterRegistry(t *testing.T) {
@@ -296,6 +342,13 @@ func (m *MockAdapter) Name() string {
 
 func (m *MockAdapter) Available() bool {
 	return m.available
+}
+
+func (m *MockAdapter) HealthCheck(ctx context.Context) error {
+	if !m.available {
+		return fmt.Errorf("adapter %q not available", m.name)
+	}
+	return nil
 }
 
 func (m *MockAdapter) CreateWorker(id string) worker.Bee {

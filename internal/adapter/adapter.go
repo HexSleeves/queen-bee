@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/exedev/waggle/internal/task"
@@ -13,6 +14,8 @@ type Adapter interface {
 	Name() string
 	// Available checks if the underlying CLI tool is installed
 	Available() bool
+	// HealthCheck verifies the adapter actually works (binary runs, auth is valid, etc.)
+	HealthCheck(ctx context.Context) error
 	// CreateWorker creates a new Bee backed by this adapter
 	CreateWorker(id string) worker.Bee
 }

@@ -246,6 +246,26 @@ func pollWorkerOutputs(ctx context.Context, q *queen.Queen, tuiProg *tui.Program
 
 // startQueen runs the Queen in a goroutine and sends Done when finished.
 func startQueen(ctx context.Context, q *queen.Queen, tuiProg *tui.Program, objective string, forceLegacy bool) (context.CancelFunc, *error) {
+	return startQueenWithFunc(ctx, q, tuiProg, func(runCtx context.Context) error {
+		if !forceLegacy && q.SupportsAgentMode() {
+			return q.RunAgent(runCtx, objective)
+		}
+		return q.Run(runCtx, objective)
+	})
+}
+
+// startQueenResume runs the Queen in resume mode in a goroutine and sends Done when finished.
+func startQueenResume(ctx context.Context, q *queen.Queen, tuiProg *tui.Program, sessionID, objective string, forceLegacy bool) (context.CancelFunc, *error) {
+	return startQueenWithFunc(ctx, q, tuiProg, func(runCtx context.Context) error {
+		if !forceLegacy && q.SupportsAgentMode() {
+			return q.RunAgentResume(runCtx, sessionID)
+		}
+		return q.Run(runCtx, objective)
+	})
+}
+
+// startQueenWithFunc runs the given function in a goroutine with output polling and sends Done when finished.
+func startQueenWithFunc(ctx context.Context, q *queen.Queen, tuiProg *tui.Program, runFunc func(context.Context) error) (context.CancelFunc, *error) {
 	runCtx, cancel := context.WithCancel(ctx)
 	var runErr error
 
@@ -255,11 +275,7 @@ func startQueen(ctx context.Context, q *queen.Queen, tuiProg *tui.Program, objec
 		defer cancel()
 		defer q.Close()
 
-		if !forceLegacy && q.SupportsAgentMode() {
-			runErr = q.RunAgent(runCtx, objective)
-		} else {
-			runErr = q.Run(runCtx, objective)
-		}
+		runErr = runFunc(runCtx)
 
 		if runErr != nil {
 			tuiProg.SendDone(false, "", runErr.Error())
@@ -585,8 +601,8 @@ func runJSON(ctx context.Context, cmd *cli.Command, cfg *config.Config, objectiv
 func cmdResume(ctx context.Context, cmd *cli.Command) error {
 	cfg := loadConfigFromCtx(ctx, cmd)
 	projectDir := cmd.String("project")
-	verbose := cmd.Bool("verbose")
-	logger := log.New(os.Stderr, "", log.LstdFlags)
+	forcePlain := cmd.Bool("plain")
+	forceLegacy := cmd.Bool("legacy")
 
 	hiveDir := filepath.Join(projectDir, ".hive")
 	dbPath := filepath.Join(hiveDir, "hive.db")
@@ -596,7 +612,8 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("no session to resume. Run 'waggle run <objective>' first")
 	}
 
-	// Open the database and find the latest resumable session
+	// Open the database and find the latest resumable session.
+	// This must happen before creating the TUI because we need the objective.
 	db, err := state.OpenDB(hiveDir)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -608,24 +625,80 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("no interrupted session found to resume. Run 'waggle run <objective>' to start a new session")
 	}
 
-	logger.Printf("Resuming session: %s", session.ID)
-	logger.Printf("   Objective: %s", session.Objective)
-	logger.Printf("   Status: %s", session.Status)
+	// Decide: TUI or plain mode
+	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	useTUI := isTTY && !forcePlain
+
+	if useTUI {
+		return runResumeTUI(ctx, cfg, session.ID, session.Objective, forceLegacy)
+	}
+	return runResumePlain(ctx, cmd, cfg, session.ID, session.Objective, forceLegacy)
+}
+
+func runResumeTUI(ctx context.Context, cfg *config.Config, sessionID, objective string, forceLegacy bool) error {
+	maxTurns := cfg.Queen.MaxIterations
+	if maxTurns <= 0 {
+		maxTurns = 50
+	}
+	tuiProg := tui.NewProgram(objective, maxTurns)
+
+	logger := log.New(tuiProg.LogWriter(), "", log.LstdFlags)
+
+	q, err := queen.New(cfg, logger)
+	if err != nil {
+		return fmt.Errorf("init queen: %w", err)
+	}
+	q.SetLogger(logger)
+	q.SuppressReport()
+
+	// Resume the session so the Queen reloads prior state
+	resumedObjective, err := q.ResumeSession(ctx, sessionID)
+	if err != nil {
+		q.Close()
+		return fmt.Errorf("resume session: %w", err)
+	}
+	// Use the objective returned by ResumeSession (should match, but be safe)
+	if resumedObjective != "" {
+		objective = resumedObjective
+	}
+
+	subscribeBusEvents(q, tuiProg)
+
+	cancel, runErr := startQueenResume(ctx, q, tuiProg, sessionID, objective, forceLegacy)
+
+	if _, err := tuiProg.Run(); err != nil {
+		cancel()
+		q.Close()
+		return fmt.Errorf("TUI error: %w", err)
+	}
+
+	return *runErr
+}
+
+func runResumePlain(ctx context.Context, cmd *cli.Command, cfg *config.Config, sessionID, objective string, forceLegacy bool) error {
+	verbose := cmd.Bool("verbose")
+	quiet := cmd.Bool("quiet")
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+
+	logger.Printf("Resuming session: %s", sessionID)
+	logger.Printf("   Objective: %s", objective)
 
 	if verbose {
 		logger.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	}
 
-	fmt.Println("")
-	fmt.Println("══════════════════════════════════════════════════")
-	fmt.Println("  Waggle - Agent Orchestration System")
-	fmt.Println("  Resuming Interrupted Session")
-	fmt.Println("══════════════════════════════════════════════════")
-	fmt.Printf("  Session ID: %s\n", session.ID)
-	fmt.Printf("  Objective: %s\n", session.Objective)
-	fmt.Printf("  Adapter:   %s\n", cfg.Workers.DefaultAdapter)
-	fmt.Printf("  Workers:   %d max parallel\n", cfg.Workers.MaxParallel)
-	fmt.Println("")
+	if !quiet {
+		fmt.Println("")
+		fmt.Println("══════════════════════════════════════════════════")
+		fmt.Println("  Waggle - Agent Orchestration System")
+		fmt.Println("  Resuming Interrupted Session")
+		fmt.Println("══════════════════════════════════════════════════")
+		fmt.Printf("  Session ID: %s\n", sessionID)
+		fmt.Printf("  Objective: %s\n", objective)
+		fmt.Printf("  Adapter:   %s\n", cfg.Workers.DefaultAdapter)
+		fmt.Printf("  Workers:   %d max parallel\n", cfg.Workers.MaxParallel)
+		fmt.Println("")
+	}
 
 	// Create queen instance
 	q, err := queen.New(cfg, logger)
@@ -635,9 +708,12 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 	defer q.Close()
 
 	// Resume the session
-	objective, err := q.ResumeSession(ctx, session.ID)
+	resumedObjective, err := q.ResumeSession(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("resume session: %w", err)
+	}
+	if resumedObjective != "" {
+		objective = resumedObjective
 	}
 
 	// Handle graceful shutdown
@@ -654,11 +730,12 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 	}()
 
 	// Run with the resumed session, preferring agent mode
-	forceLegacy := cmd.Bool("legacy")
 	var runErr error
 	if !forceLegacy && q.SupportsAgentMode() {
-		logger.Println("✓ Agent mode: resuming with tool-using Queen")
-		runErr = q.RunAgentResume(runCtx, session.ID)
+		if !quiet {
+			logger.Println("✓ Agent mode: resuming with tool-using Queen")
+		}
+		runErr = q.RunAgentResume(runCtx, sessionID)
 	} else {
 		runErr = q.Run(runCtx, objective)
 	}
@@ -666,9 +743,11 @@ func cmdResume(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("queen failed: %w", runErr)
 	}
 
-	fmt.Println("")
-	fmt.Println("══════════════════════════════════════════════════")
-	fmt.Println("  Mission Complete")
-	fmt.Println("══════════════════════════════════════════════════")
+	if !quiet {
+		fmt.Println("")
+		fmt.Println("══════════════════════════════════════════════════")
+		fmt.Println("  Mission Complete")
+		fmt.Println("══════════════════════════════════════════════════")
+	}
 	return nil
 }
