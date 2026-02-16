@@ -148,6 +148,7 @@ waggle --workers 8 run "Refactor all handlers to use the new logger"
 ### 4. Monitor Progress
 
 Waggle displays a **TUI dashboard** showing:
+
 - Queen's reasoning and tool calls
 - Task progress and dependencies
 - Worker status and output
@@ -361,6 +362,7 @@ Pre-define parallel tasks with dependencies:
 ```
 
 Run with:
+
 ```bash
 waggle --tasks tasks.json run "Execute build pipeline"
 ```
@@ -397,12 +399,14 @@ All state lives in `.hive/`:
 ```
 
 The database stores:
+
 - **Sessions** — objective, status, phase, iteration count
 - **Tasks** — full state including results, retries, errors
 - **Events** — append-only audit log
 - **Messages** — conversation history for session resume
 
 Resume interrupted sessions:
+
 ```bash
 waggle resume <session-id>
 ```
