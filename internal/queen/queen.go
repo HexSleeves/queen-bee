@@ -2,6 +2,8 @@ package queen
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base32"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -65,6 +67,15 @@ type Queen struct {
 	// For tracking worker->task assignments
 	assignments  map[string]string // workerID -> taskID
 	pendingTasks []*task.Task      // pre-defined tasks (skip AI planning)
+}
+
+// newSessionID generates a short random session ID (8 chars, base32, lowercase).
+func newSessionID() string {
+	b := make([]byte, 5) // 5 bytes = 8 base32 chars
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("s%d", time.Now().UnixNano())
+	}
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
 }
 
 // SetTasks allows pre-defining tasks, skipping AI-based planning
@@ -422,7 +433,7 @@ func (q *Queen) Run(ctx context.Context, objective string) error {
 	}
 
 	// Create DB session
-	q.sessionID = fmt.Sprintf("session-%d", time.Now().UnixNano())
+	q.sessionID = newSessionID()
 	if err := q.db.CreateSession(ctx, q.sessionID, objective); err != nil {
 		q.logger.Printf("⚠ DB: failed to create session: %v", err)
 	}

@@ -187,7 +187,7 @@ func (q *Queen) RunAgent(ctx context.Context, objective string) error {
 	}
 
 	// Create DB session
-	q.sessionID = fmt.Sprintf("session-%d", time.Now().UnixNano())
+	q.sessionID = newSessionID()
 	if err := q.db.CreateSession(ctx, q.sessionID, objective); err != nil {
 		if !q.quiet {
 			q.logger.Printf("⚠ DB: failed to create session: %v", err)
