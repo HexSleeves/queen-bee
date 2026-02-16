@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/exedev/waggle/internal/blackboard"
-	"github.com/exedev/waggle/internal/llm"
-	"github.com/exedev/waggle/internal/task"
-	"github.com/exedev/waggle/internal/worker"
+	"github.com/HexSleeves/waggle/internal/blackboard"
+	"github.com/HexSleeves/waggle/internal/llm"
+	"github.com/HexSleeves/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/worker"
 )
 
 const maxOutputLen = 8 * 1024 // 8KB threshold

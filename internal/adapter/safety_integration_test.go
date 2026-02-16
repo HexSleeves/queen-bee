@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/config"
-	"github.com/exedev/waggle/internal/safety"
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/safety"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // TestSafetyGuardBlocksDangerousCommands tests that blocked commands are rejected

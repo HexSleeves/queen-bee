@@ -3,7 +3,7 @@ package adapter
 import (
 	"os"
 
-	"github.com/exedev/waggle/internal/safety"
+	"github.com/HexSleeves/waggle/internal/safety"
 )
 
 // NewKimiAdapter creates a Kimi Code CLI adapter.

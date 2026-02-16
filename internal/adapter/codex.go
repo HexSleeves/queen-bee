@@ -1,7 +1,7 @@
 package adapter
 
 import (
-	"github.com/exedev/waggle/internal/safety"
+	"github.com/HexSleeves/waggle/internal/safety"
 )
 
 // NewCodexAdapter creates a Codex CLI adapter.

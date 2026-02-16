@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/exedev/waggle/internal/config"
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 func loadTasksFile(path string, cfg *config.Config) ([]*task.Task, error) {

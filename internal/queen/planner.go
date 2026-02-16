@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // taskIDCounter provides unique, collision-free task IDs.

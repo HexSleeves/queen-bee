@@ -3,7 +3,7 @@ package adapter
 import (
 	"os/exec"
 
-	"github.com/exedev/waggle/internal/safety"
+	"github.com/HexSleeves/waggle/internal/safety"
 )
 
 // NewExecAdapter creates a direct shell execution adapter.

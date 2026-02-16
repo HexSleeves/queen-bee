@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // TestMockClaudeAPI tests mocked Claude API interactions

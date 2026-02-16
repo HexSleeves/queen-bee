@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/adapter"
-	"github.com/exedev/waggle/internal/blackboard"
-	"github.com/exedev/waggle/internal/bus"
-	"github.com/exedev/waggle/internal/compact"
-	"github.com/exedev/waggle/internal/config"
-	"github.com/exedev/waggle/internal/safety"
-	"github.com/exedev/waggle/internal/state"
-	"github.com/exedev/waggle/internal/task"
-	"github.com/exedev/waggle/internal/worker"
+	"github.com/HexSleeves/waggle/internal/adapter"
+	"github.com/HexSleeves/waggle/internal/blackboard"
+	"github.com/HexSleeves/waggle/internal/bus"
+	"github.com/HexSleeves/waggle/internal/compact"
+	"github.com/HexSleeves/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/safety"
+	"github.com/HexSleeves/waggle/internal/state"
+	"github.com/HexSleeves/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/worker"
 )
 
 // orchTestQueen builds a Queen wired with the exec adapter so workers

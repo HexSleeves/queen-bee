@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exedev/waggle/internal/bus"
+	"github.com/HexSleeves/waggle/internal/bus"
 )
 
 func TestDetectCycles_NoCycleLinearChain(t *testing.T) {

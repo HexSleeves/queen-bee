@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/exedev/waggle/internal/state"
+	"github.com/HexSleeves/waggle/internal/state"
 	"github.com/urfave/cli/v3"
 )
 

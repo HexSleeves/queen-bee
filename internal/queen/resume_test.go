@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/config"
-	"github.com/exedev/waggle/internal/llm"
-	"github.com/exedev/waggle/internal/state"
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/llm"
+	"github.com/HexSleeves/waggle/internal/state"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // TestResumeContinuesInterruptedSession simulates an interruption mid-execution

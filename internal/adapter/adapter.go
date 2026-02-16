@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/exedev/waggle/internal/task"
-	"github.com/exedev/waggle/internal/worker"
+	"github.com/HexSleeves/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/worker"
 )
 
 // Adapter wraps a CLI tool to provide a standard worker interface

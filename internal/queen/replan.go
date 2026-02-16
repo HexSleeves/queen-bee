@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 const replanSystemPrompt = `You are a re-planning agent in a multi-agent orchestration system.

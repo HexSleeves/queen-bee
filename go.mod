@@ -1,4 +1,4 @@
-module github.com/exedev/waggle
+module github.com/HexSleeves/waggle
 
 go 1.26.0
 

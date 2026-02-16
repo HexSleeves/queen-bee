@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/bus"
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/bus"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // mockBeeWithOutput is a test implementation that can simulate various output scenarios

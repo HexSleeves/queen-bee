@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // ---------------------------------------------------------------------------

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/task"
-	"github.com/exedev/waggle/internal/worker"
+	"github.com/HexSleeves/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/worker"
 )
 
 // TestHealthCheckExecAdapter tests that HealthCheck passes for the exec adapter (bash)

@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/exedev/waggle/internal/errors"
-	"github.com/exedev/waggle/internal/safety"
-	"github.com/exedev/waggle/internal/task"
-	"github.com/exedev/waggle/internal/worker"
+	"github.com/HexSleeves/waggle/internal/errors"
+	"github.com/HexSleeves/waggle/internal/safety"
+	"github.com/HexSleeves/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/worker"
 )
 
 // PromptMode controls how the task prompt is passed to the CLI process.

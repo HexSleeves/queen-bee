@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exedev/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/config"
 )
 
 func TestNewGuard_ValidConfig(t *testing.T) {

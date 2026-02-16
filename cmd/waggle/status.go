@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/exedev/waggle/internal/state"
+	"github.com/HexSleeves/waggle/internal/state"
 	"github.com/urfave/cli/v3"
 )
 

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/config"
-	"github.com/exedev/waggle/internal/state"
+	"github.com/HexSleeves/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/state"
 )
 
 func TestDebugResume(t *testing.T) {

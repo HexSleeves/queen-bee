@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/exedev/waggle/internal/adapter"
-	"github.com/exedev/waggle/internal/task"
-	"github.com/exedev/waggle/internal/worker"
+	"github.com/HexSleeves/waggle/internal/adapter"
+	"github.com/HexSleeves/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/worker"
 )
 
 // MockRegistry implements adapter.Registry functionality with configurable adapter availability

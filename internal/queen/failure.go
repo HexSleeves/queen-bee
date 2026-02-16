@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/exedev/waggle/internal/errors"
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/errors"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // handleTaskFailure manages retry logic for failed tasks with error classification

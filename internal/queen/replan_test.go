@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exedev/waggle/internal/blackboard"
-	"github.com/exedev/waggle/internal/bus"
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/blackboard"
+	"github.com/HexSleeves/waggle/internal/bus"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 func newTestQueenForReplan(objective string) *Queen {

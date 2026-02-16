@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/exedev/waggle/internal/adapter"
-	"github.com/exedev/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/adapter"
+	"github.com/HexSleeves/waggle/internal/config"
 )
 
 func TestBuildSystemPrompt_RendersConfigValues(t *testing.T) {

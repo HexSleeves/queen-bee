@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/bus"
+	"github.com/HexSleeves/waggle/internal/bus"
 )
 
 func TestNew(t *testing.T) {

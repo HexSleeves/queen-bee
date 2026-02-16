@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/exedev/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/config"
 )
 
 // Guard enforces safety constraints on worker operations

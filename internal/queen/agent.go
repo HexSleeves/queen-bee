@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/exedev/waggle/internal/llm"
+	"github.com/HexSleeves/waggle/internal/llm"
 )
 
 // repairToolHistory fixes message history before sending to the LLM.

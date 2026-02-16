@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // EventType represents the type of JSON output event.

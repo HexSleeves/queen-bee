@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/exedev/waggle/internal/config"
-	"github.com/exedev/waggle/internal/errors"
-	"github.com/exedev/waggle/internal/state"
-	"github.com/exedev/waggle/internal/task"
+	"github.com/HexSleeves/waggle/internal/config"
+	"github.com/HexSleeves/waggle/internal/errors"
+	"github.com/HexSleeves/waggle/internal/state"
+	"github.com/HexSleeves/waggle/internal/task"
 )
 
 // TestErrorClassification verifies that the queen properly classifies errors
