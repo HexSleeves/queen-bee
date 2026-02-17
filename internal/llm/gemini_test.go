@@ -24,8 +24,8 @@ func TestGeminiClient_ChatWithHistory(t *testing.T) {
 			t.Errorf("expected x-goog-api-key=test-key, got %s", r.Header.Get("x-goog-api-key"))
 		}
 
-		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &capturedReq)
+		body := mustReadAll(t, r.Body)
+		mustUnmarshalJSON(t, body, &capturedReq)
 
 		resp := geminiResponse{
 			Candidates: []geminiCandidate{{
@@ -36,7 +36,7 @@ func TestGeminiClient_ChatWithHistory(t *testing.T) {
 				FinishReason: "STOP",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -82,7 +82,7 @@ func TestGeminiClient_Chat(t *testing.T) {
 				FinishReason: "STOP",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -101,8 +101,8 @@ func TestGeminiClient_ChatWithTools_Serialization(t *testing.T) {
 	var capturedReq geminiRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &capturedReq)
+		body := mustReadAll(t, r.Body)
+		mustUnmarshalJSON(t, body, &capturedReq)
 
 		resp := geminiResponse{
 			Candidates: []geminiCandidate{{
@@ -115,7 +115,7 @@ func TestGeminiClient_ChatWithTools_Serialization(t *testing.T) {
 			UsageMetadata: &geminiUsage{PromptTokenCount: 50, CandidatesTokenCount: 20, TotalTokenCount: 70},
 			ModelVersion:  "gemini-2.5-flash-001",
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -180,7 +180,7 @@ func TestGeminiClient_FunctionCallParsing(t *testing.T) {
 				FinishReason: "STOP",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -226,7 +226,7 @@ func TestGeminiClient_FunctionCallParsing(t *testing.T) {
 func TestGeminiClient_ErrorHandling(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":{"code":500,"message":"internal error"}}`))
+		mustWrite(t, w, []byte(`{"error":{"code":500,"message":"internal error"}}`))
 	}))
 	defer server.Close()
 
@@ -244,7 +244,7 @@ func TestGeminiClient_ErrorHandling(t *testing.T) {
 func TestGeminiClient_RateLimitError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":{"code":429,"message":"rate limited"}}`))
+		mustWrite(t, w, []byte(`{"error":{"code":429,"message":"rate limited"}}`))
 	}))
 	defer server.Close()
 
@@ -262,7 +262,7 @@ func TestGeminiClient_RateLimitError(t *testing.T) {
 func TestGeminiClient_NoCandidates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := geminiResponse{Candidates: []geminiCandidate{}}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -280,7 +280,7 @@ func TestGeminiClient_NoCandidates(t *testing.T) {
 func TestGeminiClient_NoCandidatesToolCall(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := geminiResponse{Candidates: []geminiCandidate{}}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -302,7 +302,7 @@ func TestGeminiClient_MaxTokensStopReason(t *testing.T) {
 				FinishReason: "MAX_TOKENS",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -350,8 +350,8 @@ func TestGeminiClient_ToolResultConversion(t *testing.T) {
 	var capturedReq geminiRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &capturedReq)
+		body := mustReadAll(t, r.Body)
+		mustUnmarshalJSON(t, body, &capturedReq)
 
 		resp := geminiResponse{
 			Candidates: []geminiCandidate{{
@@ -359,7 +359,7 @@ func TestGeminiClient_ToolResultConversion(t *testing.T) {
 				FinishReason: "STOP",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -403,15 +403,15 @@ func TestGeminiClient_ToolNilSchema(t *testing.T) {
 	var capturedReq geminiRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &capturedReq)
+		body := mustReadAll(t, r.Body)
+		mustUnmarshalJSON(t, body, &capturedReq)
 		resp := geminiResponse{
 			Candidates: []geminiCandidate{{
 				Content:      geminiContent{Role: "model", Parts: []geminiPart{{Text: "ok"}}},
 				FinishReason: "STOP",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -446,4 +446,34 @@ func TestNewGeminiClient_Defaults(t *testing.T) {
 func TestGeminiClient_InterfaceCompliance(t *testing.T) {
 	var _ Client = (*GeminiClient)(nil)
 	var _ ToolClient = (*GeminiClient)(nil)
+}
+
+func mustReadAll(t *testing.T, r io.Reader) []byte {
+	t.Helper()
+	body, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return body
+}
+
+func mustUnmarshalJSON(t *testing.T, data []byte, v interface{}) {
+	t.Helper()
+	if err := json.Unmarshal(data, v); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+}
+
+func mustEncodeJSON(t *testing.T, w http.ResponseWriter, v interface{}) {
+	t.Helper()
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Fatalf("encode json: %v", err)
+	}
+}
+
+func mustWrite(t *testing.T, w http.ResponseWriter, b []byte) {
+	t.Helper()
+	if _, err := w.Write(b); err != nil {
+		t.Fatalf("write response: %v", err)
+	}
 }

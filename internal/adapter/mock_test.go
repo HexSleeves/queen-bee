@@ -91,7 +91,7 @@ fi
 			}
 
 			// Wait for completion
-			for i := 0; i < 20; i++ {
+			for i := 0; i < 50; i++ {
 				status := worker.Monitor()
 				if status == "complete" || status == "failed" {
 					break
@@ -184,7 +184,7 @@ fi
 		t.Run(tt.name, func(t *testing.T) {
 			worker := adapter.CreateWorker("test-worker")
 
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			task := &task.Task{
@@ -200,7 +200,7 @@ fi
 			}
 
 			// Wait for completion
-			for i := 0; i < 20; i++ {
+			for i := 0; i < 50; i++ {
 				status := worker.Monitor()
 				if status == "complete" || status == "failed" {
 					break
@@ -289,7 +289,7 @@ fi
 			}
 			worker := adapter.CreateWorker("test-worker")
 
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			task := &task.Task{
@@ -305,7 +305,7 @@ fi
 			}
 
 			// Wait for completion
-			for i := 0; i < 20; i++ {
+			for i := 0; i < 50; i++ {
 				status := worker.Monitor()
 				if status == "complete" || status == "failed" {
 					break

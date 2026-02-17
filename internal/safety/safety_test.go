@@ -23,6 +23,12 @@ func TestNewGuard_ValidConfig(t *testing.T) {
 	if g == nil {
 		t.Fatal("NewGuard() returned nil guard")
 	}
+	if g.cfg.Mode != config.SafetyModeStrict {
+		t.Fatalf("NewGuard() mode = %q, want %q", g.cfg.Mode, config.SafetyModeStrict)
+	}
+	if len(g.cfg.EnforceOnAdapters) != 1 || g.cfg.EnforceOnAdapters[0] != "exec" {
+		t.Fatalf("NewGuard() enforce_on_adapters = %v, want [exec]", g.cfg.EnforceOnAdapters)
+	}
 }
 
 func TestNewGuard_RelativeAllowedPaths(t *testing.T) {
@@ -61,9 +67,12 @@ func TestNewGuard_EmptyAllowedPaths(t *testing.T) {
 	}
 
 	// With no allowed paths, should default to project root
-	abs, _ := filepath.Abs(root)
-	if len(g.resolvedPaths) != 1 || g.resolvedPaths[0] != abs {
-		t.Errorf("expected resolvedPaths=[%q], got %v", abs, g.resolvedPaths)
+	expected, err := canonicalPath(root)
+	if err != nil {
+		t.Fatalf("canonicalPath(root): %v", err)
+	}
+	if len(g.resolvedPaths) != 1 || g.resolvedPaths[0] != expected {
+		t.Errorf("expected resolvedPaths=[%q], got %v", expected, g.resolvedPaths)
 	}
 }
 
@@ -134,6 +143,49 @@ func TestCheckPath_AbsoluteCheckedDirectly(t *testing.T) {
 	}
 }
 
+func TestCheckPath_SiblingPrefixBypassBlocked(t *testing.T) {
+	root := t.TempDir()
+	sibling := root + "-sibling"
+	if err := os.MkdirAll(sibling, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.SafetyConfig{
+		AllowedPaths: []string{root},
+	}
+	g, err := NewGuard(cfg, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bypassPath := filepath.Join(sibling, "file.txt")
+	if err := g.CheckPath(bypassPath); err == nil {
+		t.Fatalf("CheckPath(%q) = nil, want error (sibling prefix bypass)", bypassPath)
+	}
+}
+
+func TestCheckPath_CanonicalAliasAllowed(t *testing.T) {
+	realRoot := t.TempDir()
+	aliasParent := t.TempDir()
+	aliasRoot := filepath.Join(aliasParent, "alias-root")
+	if err := os.Symlink(realRoot, aliasRoot); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	cfg := config.SafetyConfig{
+		AllowedPaths: []string{aliasRoot},
+	}
+	g, err := NewGuard(cfg, aliasRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pathViaRealRoot := filepath.Join(realRoot, "somefile.txt")
+	if err := g.CheckPath(pathViaRealRoot); err != nil {
+		t.Fatalf("CheckPath(%q) = %v, want nil (canonical alias should be allowed)", pathViaRealRoot, err)
+	}
+}
+
 func TestCheckCommand_NotBlocked(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.SafetyConfig{
@@ -191,6 +243,124 @@ func TestCheckCommand_CaseInsensitive(t *testing.T) {
 
 	if err := g.CheckCommand("RM -RF /"); err == nil {
 		t.Error("CheckCommand('RM -RF /') = nil, want error (case-insensitive match)")
+	}
+}
+
+func TestCheckCommand_StrictAllowsDynamicArguments(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.SafetyConfig{
+		Mode:            config.SafetyModeStrict,
+		BlockedCommands: []string{"rm -rf /"},
+	}
+	g, err := NewGuard(cfg, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := `file=/tmp/demo; if [ -f "$file" ]; then cat "$file"; fi`
+	if err := g.CheckCommand(cmd); err != nil {
+		t.Fatalf("CheckCommand(strict dynamic args) = %v, want nil", err)
+	}
+}
+
+func TestCheckCommand_StrictBlocksDynamicCommandName(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.SafetyConfig{
+		Mode: config.SafetyModeStrict,
+	}
+	g, err := NewGuard(cfg, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := g.CheckCommand(`${RUNNER} echo hi`); err == nil {
+		t.Fatal("CheckCommand(strict dynamic command name) = nil, want error")
+	}
+}
+
+func TestCheckCommand_PermissiveAllowsNonCriticalPatterns(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.SafetyConfig{
+		Mode:            config.SafetyModePermissive,
+		BlockedCommands: []string{"sudo rm"},
+	}
+	g, err := NewGuard(cfg, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := g.CheckCommand("sudo rm -rf /var/tmp/demo"); err != nil {
+		t.Fatalf("CheckCommand(permissive) = %v, want nil for non-critical pattern", err)
+	}
+}
+
+func TestCheckCommand_PermissiveStillBlocksHighConfidencePatterns(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.SafetyConfig{
+		Mode:            config.SafetyModePermissive,
+		BlockedCommands: []string{"rm -rf /"},
+	}
+	g, err := NewGuard(cfg, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := g.CheckCommand("rm -rf /"); err == nil {
+		t.Fatal("CheckCommand(permissive high-risk) = nil, want error")
+	}
+}
+
+func TestCheckCommand_InvalidModeDefaultsToStrict(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.SafetyConfig{
+		Mode:            "unknown-mode",
+		BlockedCommands: []string{"sudo rm"},
+	}
+	g, err := NewGuard(cfg, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if g.cfg.Mode != config.SafetyModeStrict {
+		t.Fatalf("mode = %q, want %q", g.cfg.Mode, config.SafetyModeStrict)
+	}
+	if err := g.CheckCommand("sudo rm -rf /var/tmp/demo"); err == nil {
+		t.Fatal("CheckCommand(default-strict) = nil, want error")
+	}
+}
+
+func TestEnforceCommandBlocking_DefaultExecOnly(t *testing.T) {
+	root := t.TempDir()
+	g, err := NewGuard(config.SafetyConfig{}, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !g.EnforceCommandBlocking("exec") {
+		t.Fatal("expected command blocking enabled for exec by default")
+	}
+	if g.EnforceCommandBlocking("codex") {
+		t.Fatal("expected command blocking disabled for codex by default")
+	}
+}
+
+func TestEnforceCommandBlocking_CustomList(t *testing.T) {
+	root := t.TempDir()
+	g, err := NewGuard(config.SafetyConfig{
+		EnforceOnAdapters: []string{"codex", "claude-code"},
+	}, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !g.EnforceCommandBlocking("codex") {
+		t.Fatal("expected command blocking enabled for codex")
+	}
+	if !g.EnforceCommandBlocking("claude-code") {
+		t.Fatal("expected command blocking enabled for claude-code")
+	}
+	if g.EnforceCommandBlocking("exec") {
+		t.Fatal("expected command blocking disabled for exec")
 	}
 }
 
@@ -370,7 +540,10 @@ func TestProjectRoot_ReturnsAbsolute(t *testing.T) {
 		t.Errorf("ProjectRoot() = %q, want absolute path", got)
 	}
 	// Should match the resolved root
-	expected, _ := filepath.Abs(root)
+	expected, err := canonicalPath(root)
+	if err != nil {
+		t.Fatalf("canonicalPath(root): %v", err)
+	}
 	if got != expected {
 		t.Errorf("ProjectRoot() = %q, want %q", got, expected)
 	}

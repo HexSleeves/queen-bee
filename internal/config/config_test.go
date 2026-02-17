@@ -71,6 +71,12 @@ func TestDefaultConfig_SafetyDefaults(t *testing.T) {
 	if cfg.Safety.MaxFileSize != 10485760 {
 		t.Errorf("Safety.MaxFileSize = %d, want %d", cfg.Safety.MaxFileSize, 10485760)
 	}
+	if cfg.Safety.Mode != SafetyModeStrict {
+		t.Errorf("Safety.Mode = %q, want %q", cfg.Safety.Mode, SafetyModeStrict)
+	}
+	if len(cfg.Safety.EnforceOnAdapters) != 1 || cfg.Safety.EnforceOnAdapters[0] != "exec" {
+		t.Errorf("Safety.EnforceOnAdapters = %v, want [exec]", cfg.Safety.EnforceOnAdapters)
+	}
 }
 
 func TestDefaultConfig_AdapterEntries(t *testing.T) {
@@ -147,7 +153,9 @@ func TestLoad_FromJSONFile(t *testing.T) {
 			"allowed_paths": [".", "/tmp"],
 			"blocked_commands": ["rm -rf /"],
 			"read_only_mode": true,
-			"max_file_size": 5242880
+			"max_file_size": 5242880,
+			"mode": "permissive",
+			"enforce_on_adapters": ["exec", "claude-code"]
 		}
 	}`)
 
@@ -195,6 +203,12 @@ func TestLoad_FromJSONFile(t *testing.T) {
 	}
 	if cfg.Safety.MaxFileSize != 5242880 {
 		t.Errorf("Safety.MaxFileSize = %d, want %d", cfg.Safety.MaxFileSize, 5242880)
+	}
+	if cfg.Safety.Mode != SafetyModePermissive {
+		t.Errorf("Safety.Mode = %q, want %q", cfg.Safety.Mode, SafetyModePermissive)
+	}
+	if len(cfg.Safety.EnforceOnAdapters) != 2 {
+		t.Errorf("Safety.EnforceOnAdapters length = %d, want 2", len(cfg.Safety.EnforceOnAdapters))
 	}
 	if len(cfg.Safety.AllowedPaths) != 2 {
 		t.Errorf("Safety.AllowedPaths length = %d, want 2", len(cfg.Safety.AllowedPaths))
@@ -259,6 +273,8 @@ func TestSaveAndLoad_Roundtrip(t *testing.T) {
 	original.Safety.MaxFileSize = 999
 	original.Safety.AllowedPaths = []string{"/a", "/b"}
 	original.Safety.BlockedCommands = []string{"danger"}
+	original.Safety.Mode = SafetyModePermissive
+	original.Safety.EnforceOnAdapters = []string{"exec", "codex"}
 
 	if err := original.Save(path); err != nil {
 		t.Fatalf("Save() error: %v", err)
@@ -323,6 +339,12 @@ func TestSaveAndLoad_Roundtrip(t *testing.T) {
 	}
 	if len(loaded.Safety.BlockedCommands) != len(original.Safety.BlockedCommands) {
 		t.Errorf("Safety.BlockedCommands length = %d, want %d", len(loaded.Safety.BlockedCommands), len(original.Safety.BlockedCommands))
+	}
+	if loaded.Safety.Mode != original.Safety.Mode {
+		t.Errorf("Safety.Mode = %q, want %q", loaded.Safety.Mode, original.Safety.Mode)
+	}
+	if len(loaded.Safety.EnforceOnAdapters) != len(original.Safety.EnforceOnAdapters) {
+		t.Errorf("Safety.EnforceOnAdapters length = %d, want %d", len(loaded.Safety.EnforceOnAdapters), len(original.Safety.EnforceOnAdapters))
 	}
 }
 

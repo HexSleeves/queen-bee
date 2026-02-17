@@ -138,14 +138,18 @@ func (w *CLIWorker) Spawn(ctx context.Context, t *task.Task) error {
 	defer w.mu.Unlock()
 
 	guard := w.adapter.guard
+	enforceCommandChecks := false
 
 	// Safety checks
 	if guard != nil {
+		enforceCommandChecks = guard.EnforceCommandBlocking(w.adapter.name)
 		if err := guard.ValidateTaskPaths(t.AllowedPaths); err != nil {
 			return w.failSafety("safety check failed: %v", err)
 		}
-		if err := guard.CheckCommand(t.GetDescription()); err != nil {
-			return w.failSafety("safety check failed: %v", err)
+		if enforceCommandChecks {
+			if err := guard.CheckCommand(t.GetDescription()); err != nil {
+				return w.failSafety("safety check failed: %v", err)
+			}
 		}
 		if guard.IsReadOnly() {
 			t.SetDescription("[SAFETY WARNING: System is in read-only mode]\n\n" + t.GetDescription())
@@ -159,7 +163,7 @@ func (w *CLIWorker) Spawn(ctx context.Context, t *task.Task) error {
 		if cmd, ok := t.Context["command"]; ok {
 			script = cmd
 		}
-		if guard != nil {
+		if guard != nil && enforceCommandChecks {
 			if err := guard.CheckCommand(script); err != nil {
 				return w.failSafety("safety check failed: %v", err)
 			}

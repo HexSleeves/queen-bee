@@ -282,6 +282,8 @@ Running `waggle init` creates a `waggle.json` configuration file:
   "safety": {
     "allowed_paths": ["."],
     "blocked_commands": ["rm -rf /", "sudo rm"],
+    "mode": "strict",
+    "enforce_on_adapters": ["exec"],
     "read_only_mode": false,
     "max_file_size": 10485760
   }
@@ -326,6 +328,8 @@ The Queen's own LLM is separate from worker adapters. Providers with **tool-use 
 | `workers.max_retries` | Retry limit | Per-task retry count |
 | `safety.allowed_paths` | Path allowlist | Directories workers can touch |
 | `safety.blocked_commands` | Command blocklist | Patterns to reject |
+| `safety.mode` | Safety mode | `strict` (default) or `permissive` |
+| `safety.enforce_on_adapters` | Enforcement scope | Adapters where command blocking is enforced |
 
 ---
 
@@ -419,6 +423,7 @@ The **Safety Guard** enforces constraints on every worker operation:
 
 - **Path allowlist** — workers can only touch files within configured directories
 - **Command blocklist** — rejects commands matching dangerous patterns
+- **Safety mode** — `strict` blocks all configured matches, `permissive` blocks only high-confidence dangerous matches
 - **File size limits** — prevents reading/writing files above threshold (default: 10 MB)
 - **Read-only mode** — blocks all write operations when enabled
 

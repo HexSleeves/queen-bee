@@ -324,9 +324,10 @@ func TestSafetyGuardWithAllAdapters(t *testing.T) {
 	tempDir := t.TempDir()
 
 	safetyCfg := config.SafetyConfig{
-		AllowedPaths:    []string{tempDir},
-		BlockedCommands: []string{"dangerous"},
-		MaxFileSize:     10 * 1024 * 1024,
+		AllowedPaths:      []string{tempDir},
+		BlockedCommands:   []string{"dangerous"},
+		MaxFileSize:       10 * 1024 * 1024,
+		EnforceOnAdapters: []string{"claude-code", "codex", "opencode", "exec", "kimi", "gemini"},
 	}
 
 	guard, err := safety.NewGuard(safetyCfg, tempDir)

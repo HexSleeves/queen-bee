@@ -28,6 +28,13 @@ type Config struct {
 	Output OutputConfig `json:"-"`
 }
 
+const (
+	// SafetyModeStrict blocks any configured command match.
+	SafetyModeStrict = "strict"
+	// SafetyModePermissive only blocks high-confidence dangerous command patterns.
+	SafetyModePermissive = "permissive"
+)
+
 // OutputConfig holds output format preferences set via CLI flags.
 // These are runtime-only settings (not persisted to waggle.json).
 type OutputConfig struct {
@@ -81,10 +88,15 @@ type AdapterConfig struct {
 }
 
 type SafetyConfig struct {
-	AllowedPaths    []string `json:"allowed_paths"`
-	BlockedCommands []string `json:"blocked_commands"`
-	ReadOnlyMode    bool     `json:"read_only_mode"`
-	MaxFileSize     int64    `json:"max_file_size"`
+	AllowedPaths       []string `json:"allowed_paths"`
+	BlockedCommands    []string `json:"blocked_commands"`
+	ReadOnlyMode       bool     `json:"read_only_mode"`
+	MaxFileSize        int64    `json:"max_file_size"`
+	Mode               string   `json:"mode,omitempty"`                // strict | permissive
+	EnforceOnAdapters  []string `json:"enforce_on_adapters,omitempty"` // e.g. ["exec"]
+	BlockedExecutables []string `json:"blocked_executables,omitempty"` // reserved for structured blocking
+	BlockedPatterns    []string `json:"blocked_patterns,omitempty"`    // reserved for structured blocking
+	AllowExecutables   []string `json:"allow_executables,omitempty"`   // reserved for structured blocking
 }
 
 func DefaultConfig() *Config {
@@ -131,9 +143,11 @@ func DefaultConfig() *Config {
 			},
 		},
 		Safety: SafetyConfig{
-			AllowedPaths:    []string{"."},
-			BlockedCommands: []string{"rm -rf /", "sudo rm"},
-			MaxFileSize:     10 * 1024 * 1024,
+			AllowedPaths:      []string{"."},
+			BlockedCommands:   []string{"rm -rf /", "sudo rm"},
+			MaxFileSize:       10 * 1024 * 1024,
+			Mode:              SafetyModeStrict,
+			EnforceOnAdapters: []string{"exec"},
 		},
 	}
 }

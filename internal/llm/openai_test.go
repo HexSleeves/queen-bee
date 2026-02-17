@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,7 +25,7 @@ func TestOpenAIClient_ChatWithHistory(t *testing.T) {
 			t.Errorf("expected application/json content-type")
 		}
 
-		body, _ := io.ReadAll(r.Body)
+		body := mustReadAll(t, r.Body)
 		var req openaiRequest
 		if err := json.Unmarshal(body, &req); err != nil {
 			t.Fatalf("unmarshal request: %v", err)
@@ -49,7 +48,7 @@ func TestOpenAIClient_ChatWithHistory(t *testing.T) {
 			}},
 			Usage: &openaiUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -69,9 +68,9 @@ func TestOpenAIClient_ChatWithHistory(t *testing.T) {
 
 func TestOpenAIClient_Chat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body := mustReadAll(t, r.Body)
 		var req openaiRequest
-		json.Unmarshal(body, &req)
+		mustUnmarshalJSON(t, body, &req)
 		// Chat wraps into single user message + system
 		if len(req.Messages) != 2 {
 			t.Errorf("expected 2 messages, got %d", len(req.Messages))
@@ -82,7 +81,7 @@ func TestOpenAIClient_Chat(t *testing.T) {
 				FinishReason: "stop",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -100,8 +99,8 @@ func TestOpenAIClient_ChatWithTools_Serialization(t *testing.T) {
 	var capturedReq openaiRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &capturedReq)
+		body := mustReadAll(t, r.Body)
+		mustUnmarshalJSON(t, body, &capturedReq)
 
 		resp := openaiResponse{
 			Choices: []openaiChoice{{
@@ -114,7 +113,7 @@ func TestOpenAIClient_ChatWithTools_Serialization(t *testing.T) {
 			Usage: &openaiUsage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150},
 			Model: "gpt-4o-2024-01-01",
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -205,7 +204,7 @@ func TestOpenAIClient_ToolCallParsing(t *testing.T) {
 				FinishReason: "tool_calls",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -242,7 +241,7 @@ func TestOpenAIClient_ToolCallParsing(t *testing.T) {
 func TestOpenAIClient_ErrorHandling(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":{"message":"internal server error","type":"server_error"}}`))
+		mustWrite(t, w, []byte(`{"error":{"message":"internal server error","type":"server_error"}}`))
 	}))
 	defer server.Close()
 
@@ -259,7 +258,7 @@ func TestOpenAIClient_ErrorHandling(t *testing.T) {
 func TestOpenAIClient_RateLimitError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":{"message":"rate limited","type":"rate_limit"}}`))
+		mustWrite(t, w, []byte(`{"error":{"message":"rate limited","type":"rate_limit"}}`))
 	}))
 	defer server.Close()
 
@@ -281,7 +280,7 @@ func TestOpenAIClient_MaxTokensStopReason(t *testing.T) {
 				FinishReason: "length",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -300,7 +299,7 @@ func TestOpenAIClient_MaxTokensStopReason(t *testing.T) {
 func TestOpenAIClient_NoChoices(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := openaiResponse{Choices: []openaiChoice{}}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -317,7 +316,7 @@ func TestOpenAIClient_NoChoices(t *testing.T) {
 func TestOpenAIClient_NoChoicesToolCall(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := openaiResponse{Choices: []openaiChoice{}}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -336,7 +335,7 @@ func TestOpenAIClient_APIError(t *testing.T) {
 			Choices: []openaiChoice{},
 			Error:   &openaiError{Message: "bad request", Type: "invalid_request"},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 
@@ -352,9 +351,9 @@ func TestOpenAIClient_APIError(t *testing.T) {
 
 func TestOpenAIClient_ChatWithHistory_NoSystem(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body := mustReadAll(t, r.Body)
 		var req openaiRequest
-		json.Unmarshal(body, &req)
+		mustUnmarshalJSON(t, body, &req)
 		// No system prompt → just 1 user message
 		if len(req.Messages) != 1 {
 			t.Errorf("expected 1 message (no system), got %d", len(req.Messages))
@@ -368,7 +367,7 @@ func TestOpenAIClient_ChatWithHistory_NoSystem(t *testing.T) {
 				FinishReason: "stop",
 			}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		mustEncodeJSON(t, w, resp)
 	}))
 	defer server.Close()
 

@@ -199,7 +199,9 @@ func TestContentBlock_OmitEmpty(t *testing.T) {
 	}
 	// tool_call should be omitted
 	var m map[string]interface{}
-	json.Unmarshal(data, &m)
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if _, ok := m["tool_call"]; ok {
 		t.Error("tool_call should be omitted for text-only block")
 	}
@@ -234,7 +236,9 @@ func TestToolResult_JSONRoundTrip(t *testing.T) {
 
 	// IsError omitted when false
 	var m map[string]interface{}
-	json.Unmarshal(data, &m)
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if _, ok := m["is_error"]; ok {
 		t.Error("is_error should be omitted when false")
 	}

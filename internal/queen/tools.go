@@ -23,16 +23,24 @@ func truncateLargeOutput(output string, taskID string, hiveDir string) string {
 		return output
 	}
 
-	// Save full output to file
+	// Save full output to file.
 	outputDir := filepath.Join(hiveDir, "outputs")
-	os.MkdirAll(outputDir, 0755)
-	outputPath := filepath.Join(outputDir, taskID+".log")
-	os.WriteFile(outputPath, []byte(output), 0644)
+	savedPath := ""
+	if err := os.MkdirAll(outputDir, 0o755); err == nil {
+		outputPath := filepath.Join(outputDir, taskID+".log")
+		if err := os.WriteFile(outputPath, []byte(output), 0o644); err == nil {
+			savedPath = fmt.Sprintf(".hive/outputs/%s.log", taskID)
+		}
+	}
 
 	head := output[:3*1024]
 	tail := output[len(output)-3*1024:]
-	return fmt.Sprintf("%s\n\n[...truncated, %d bytes total. Full output saved to .hive/outputs/%s.log \u2014 use read_file to inspect specific sections...]\n\n%s",
-		head, len(output), taskID, tail)
+	if savedPath != "" {
+		return fmt.Sprintf("%s\n\n[...truncated, %d bytes total. Full output saved to %s -- use read_file to inspect specific sections...]\n\n%s",
+			head, len(output), savedPath, tail)
+	}
+	return fmt.Sprintf("%s\n\n[...truncated, %d bytes total. Full output could not be persisted in .hive/outputs; use read_file for targeted inspection...]\n\n%s",
+		head, len(output), tail)
 }
 
 // ToolOutput separates LLM-facing content from TUI-facing display.
@@ -338,7 +346,7 @@ type assignTaskInput struct {
 
 func handleAssignTask(ctx context.Context, q *Queen, input json.RawMessage) (ToolOutput, error) {
 	if q.cfg.Queen.DryRun {
-		return ToolOutput{}, fmt.Errorf("dry-run mode: task assignment blocked. Use get_status to review the planned task graph, then call complete with your plan summary.")
+		return ToolOutput{}, fmt.Errorf("dry-run mode: task assignment blocked. Use get_status to review the planned task graph, then call complete with your plan summary")
 	}
 
 	var in assignTaskInput

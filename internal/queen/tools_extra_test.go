@@ -16,7 +16,7 @@ import (
 func TestHandleReadFile_LineStartOnly(t *testing.T) {
 	q, tmpDir := testQueen(t)
 	content := "line1\nline2\nline3\nline4\nline5\n"
-	os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte(content), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "test.txt"), []byte(content), 0o644)
 
 	result, err := handleReadFile(context.Background(), q, toJSON(map[string]interface{}{
 		"path": "test.txt", "line_start": 3,
@@ -40,7 +40,7 @@ func TestHandleReadFile_LineStartOnly(t *testing.T) {
 func TestHandleReadFile_LineEndOnly(t *testing.T) {
 	q, tmpDir := testQueen(t)
 	content := "line1\nline2\nline3\nline4\nline5\n"
-	os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte(content), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "test.txt"), []byte(content), 0o644)
 
 	result, err := handleReadFile(context.Background(), q, toJSON(map[string]interface{}{
 		"path": "test.txt", "line_end": 2,
@@ -64,7 +64,7 @@ func TestHandleReadFile_LineEndOnly(t *testing.T) {
 func TestHandleReadFile_LineNumbers(t *testing.T) {
 	q, tmpDir := testQueen(t)
 	content := "alpha\nbeta\ngamma\n"
-	os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte(content), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "test.txt"), []byte(content), 0o644)
 
 	result, err := handleReadFile(context.Background(), q, toJSON(map[string]interface{}{
 		"path": "test.txt", "line_start": 1, "line_end": 3,
@@ -111,7 +111,7 @@ func TestHandleReadFile_NonExistentFile(t *testing.T) {
 func TestHandleListFiles_Empty(t *testing.T) {
 	q, tmpDir := testQueen(t)
 	// Create an empty subdirectory
-	os.MkdirAll(filepath.Join(tmpDir, "emptydir"), 0755)
+	mustMkdirAll(t, filepath.Join(tmpDir, "emptydir"), 0o755)
 
 	result, err := handleListFiles(context.Background(), q, toJSON(map[string]interface{}{
 		"path": "emptydir",
@@ -126,7 +126,7 @@ func TestHandleListFiles_Empty(t *testing.T) {
 
 func TestHandleListFiles_PatternNoMatch(t *testing.T) {
 	q, tmpDir := testQueen(t)
-	os.WriteFile(filepath.Join(tmpDir, "a.go"), []byte("package a"), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "a.go"), []byte("package a"), 0o644)
 
 	result, err := handleListFiles(context.Background(), q, toJSON(map[string]interface{}{
 		"pattern": "*.py",
@@ -142,8 +142,8 @@ func TestHandleListFiles_PatternNoMatch(t *testing.T) {
 func TestHandleListFiles_Subdirectory(t *testing.T) {
 	q, tmpDir := testQueen(t)
 	subDir := filepath.Join(tmpDir, "sub")
-	os.MkdirAll(subDir, 0755)
-	os.WriteFile(filepath.Join(subDir, "file.go"), []byte("package sub"), 0644)
+	mustMkdirAll(t, subDir, 0o755)
+	mustWriteFile(t, filepath.Join(subDir, "file.go"), []byte("package sub"), 0o644)
 
 	result, err := handleListFiles(context.Background(), q, toJSON(map[string]interface{}{
 		"path": "sub",
@@ -178,7 +178,7 @@ func TestHandleListFiles_DirectoryNotFound(t *testing.T) {
 
 func TestHandleListFiles_DefaultPath(t *testing.T) {
 	q, tmpDir := testQueen(t)
-	os.WriteFile(filepath.Join(tmpDir, "root.txt"), []byte("x"), 0644)
+	mustWriteFile(t, filepath.Join(tmpDir, "root.txt"), []byte("x"), 0o644)
 
 	// No path parameter - should default to "."
 	result, err := handleListFiles(context.Background(), q, json.RawMessage(`{}`))
@@ -243,6 +243,20 @@ func TestHandleRejectTask_MissingTaskID(t *testing.T) {
 	}))
 	if err == nil || !strings.Contains(err.Error(), "task_id is required") {
 		t.Fatalf("expected task_id required error, got: %v", err)
+	}
+}
+
+func mustWriteFile(t *testing.T, path string, data []byte, mode os.FileMode) {
+	t.Helper()
+	if err := os.WriteFile(path, data, mode); err != nil {
+		t.Fatalf("write file %q: %v", path, err)
+	}
+}
+
+func mustMkdirAll(t *testing.T, path string, mode os.FileMode) {
+	t.Helper()
+	if err := os.MkdirAll(path, mode); err != nil {
+		t.Fatalf("mkdir %q: %v", path, err)
 	}
 }
 

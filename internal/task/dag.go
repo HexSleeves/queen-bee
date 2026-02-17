@@ -189,8 +189,8 @@ func (g *TaskGraph) RenderASCII(width int) string {
 		if d == 0 {
 			b.WriteString("Layer 0 (roots):\n")
 		} else {
-			b.WriteString(fmt.Sprintf("  %s\n", strings.Repeat("|", 1)))
-			b.WriteString(fmt.Sprintf("  v\n"))
+			b.WriteString("  |\n")
+			b.WriteString("  v\n")
 			b.WriteString(fmt.Sprintf("Layer %d:\n", d))
 		}
 

@@ -39,9 +39,25 @@ test-pkg pkg:
 test-race:
     go test ./... -count=1 -timeout 120s -race
 
+# Run race-focused tests for core orchestration and safety packages
+test-race-core:
+    go test -race ./internal/safety ./internal/adapter ./internal/queen -count=1 -timeout 180s
+
 # Run go vet
 vet:
     go vet ./...
+
+# Run golangci-lint with repository config
+lint:
+    go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run --config=.golangci.yml
+
+# Run staticcheck
+staticcheck:
+    go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+
+# Run vulnerability scan
+vuln:
+    go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 # Format all Go files
 fmt:
@@ -68,5 +84,5 @@ clean:
 tidy:
     go mod tidy
 
-# Full CI check: fmt, vet, test
-ci: fmt-check vet test
+# Full CI check: fmt, vet, lint, staticcheck, test, race-core
+ci: fmt-check vet lint staticcheck test test-race-core
