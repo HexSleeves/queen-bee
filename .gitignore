@@ -13,4 +13,4 @@ waggle.json
 *.test
 *.out
 
-.omc*
+opencode/
